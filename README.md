@@ -39,11 +39,14 @@ corresponding prefix warning.
 # Print the manifest to stdout and a readable report to stderr
 featurescan scan ./dist
 
-# Write the manifest to a file
+# Write the manifest to a file and print the report to stdout
 featurescan scan ./dist -o features.json
 
 # Include usage locations in the report
 featurescan scan ./dist -o features.json --verbose
+
+# Disable the interactive progress bar
+featurescan scan ./dist -o features.json --no-progress
 
 # Newline-delimited output
 featurescan scan ./dist --format lines -o features.txt
@@ -56,6 +59,12 @@ featurescan scan ./dist --include '**/*.html' --exclude 'legacy/**'
 `**/*.{html,htm,css,js,mjs,cjs}` and ignores `node_modules`, `.git`, and source
 maps. Inline `<style>`, `<script>`, `style=""`, and common `on*` handlers are
 scanned as well.
+
+Without `-o`, the manifest goes to stdout and the report to stderr, so the
+manifest can be piped. With `-o`, the manifest is written to the file and the
+report goes to stdout. An interactive progress bar is shown on stderr and is
+disabled automatically when stderr is not a TTY. Report colors follow the
+report's destination stream; use `--no-color` or `NO_COLOR` to disable them.
 
 ### Checking a manifest
 

@@ -9,6 +9,7 @@ import {
   manifestKeys,
   parseManifest
 } from "./manifest";
+import { ProgressBar } from "./report/progress";
 import {
   formatCheckJson,
   printCheckReport,
@@ -26,6 +27,7 @@ interface ScanCliOptions {
   maxUsages?: string | number;
   verbose?: boolean;
   quiet?: boolean;
+  progress?: boolean;
 }
 
 interface CheckCliOptions {
@@ -64,16 +66,34 @@ async function runScan(
   }
 
   const started = Date.now();
-  const result = await scan(rootArg ?? ".", {
-    include: stringArray(options.include),
-    exclude: stringArray(options.exclude),
-    maxUsages: parseMaxUsages(options.maxUsages)
-  });
+  const out = options.out;
+  const writeToFile = Boolean(out && out !== "-");
+  const reportStream = writeToFile ? process.stdout : process.stderr;
+  const showProgress =
+    !options.quiet &&
+    options.progress !== false &&
+    process.env.TERM !== "dumb";
+  const progress = new ProgressBar(process.stderr, showProgress);
+
+  const result = await (async () => {
+    try {
+      return await scan(rootArg ?? ".", {
+        include: stringArray(options.include),
+        exclude: stringArray(options.exclude),
+        maxUsages: parseMaxUsages(options.maxUsages),
+        onProgress: showProgress
+          ? (state) => progress.update(state)
+          : undefined
+      });
+    } finally {
+      progress.stop();
+    }
+  })();
+
   const keys = manifestKeys(result);
   const output = formatManifest(keys, format);
-  const out = options.out;
 
-  if (out && out !== "-") {
+  if (writeToFile && out) {
     const target = path.resolve(out);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, output, "utf8");
@@ -84,8 +104,9 @@ async function runScan(
   printScanReport(result, keys, {
     verbose: options.verbose,
     quiet: options.quiet,
-    out: out && out !== "-" ? out : undefined,
-    durationMs: Date.now() - started
+    out: writeToFile ? out : undefined,
+    durationMs: Date.now() - started,
+    stream: reportStream
   });
 }
 
@@ -135,7 +156,10 @@ export async function main(argv = process.argv): Promise<void> {
 
   cli
     .command("scan [root]", "Scan a built site and emit a feature key manifest")
-    .option("-o, --out <file>", "write the manifest to a file (default: stdout)")
+    .option(
+      "-o, --out <file>",
+      "write the manifest to a file and print the report to stdout"
+    )
     .option("--format <format>", 'manifest format: "json" or "lines"', {
       default: "json"
     })
@@ -149,7 +173,8 @@ export async function main(argv = process.argv): Promise<void> {
       default: 50
     })
     .option("-v, --verbose", "show usage locations in the report")
-    .option("-q, --quiet", "suppress the human-readable report")
+    .option("-q, --quiet", "suppress the report and progress bar")
+    .option("--no-progress", "disable the progress bar")
     .action(runScan);
 
   cli

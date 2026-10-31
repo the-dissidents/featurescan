@@ -20,6 +20,8 @@ export type {
   FeatureKind,
   ManifestFormat,
   ScanOptions,
+  ScanPhase,
+  ScanProgress,
   ScanResult,
   Usage
 } from "./types";

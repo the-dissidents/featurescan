@@ -44,6 +44,18 @@ Build/tooling:
 - `dist/cli.js` is the Node CLI; `dist/index.js` exposes the Node API.
 - Dependencies are external in the bundle; the CLI is not a single-file binary.
 
+## CLI output and progress
+
+- `scan` exposes an `onProgress` callback through `ScanOptions`.
+- The CLI renders an interactive progress bar on stderr only when stderr is a
+  TTY; `--quiet` and `--no-progress` disable it.
+- Without `-o`, the manifest is written to stdout and the report to stderr.
+- With `-o`, the manifest is written to the file and the report to stdout, so
+  report output can be redirected independently without corrupting the manifest.
+- Report colors are derived from the report's destination stream, not stdout,
+  so redirected manifests do not strip color from a TTY report.
+- `--no-color` and `NO_COLOR` disable colors.
+
 ## Detection rules
 
 HTML/CSS rules are largely derived from BCD key existence:
@@ -140,5 +152,6 @@ This avoids blocking on ambiguous method names while still surfacing them.
 - Support evaluation tests with synthetic BCD entries.
 - Fixture-site end-to-end scan and manifest round-trip.
 - Check command/target resolution tests.
+- Progress bar and destination-stream color tests.
 
 Run with `pnpm test`, `pnpm typecheck`, and `pnpm build`.

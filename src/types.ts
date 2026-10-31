@@ -22,10 +22,20 @@ export interface Diagnostic {
   message: string;
 }
 
+export type ScanPhase = "discover" | "scan" | "done";
+
+export interface ScanProgress {
+  phase: ScanPhase;
+  processed: number;
+  total: number;
+  file?: string;
+}
+
 export interface ScanOptions {
   include?: string[];
   exclude?: string[];
   maxUsages?: number;
+  onProgress?: (progress: ScanProgress) => void;
 }
 
 export interface ScanResult {

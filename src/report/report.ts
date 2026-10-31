@@ -1,7 +1,7 @@
-import pc from "picocolors";
 import type { CheckIssue, CheckResult } from "../check/index";
 import type { Detection, ScanResult } from "../types";
 import { VERSION } from "../version";
+import { createColors, type Colors } from "./colors";
 import { describeKey, kindForKey } from "./describe";
 
 export interface ScanReportOptions {
@@ -9,6 +9,11 @@ export interface ScanReportOptions {
   quiet?: boolean;
   out?: string;
   durationMs?: number;
+  stream?: NodeJS.WriteStream;
+}
+
+export interface CheckReportOptions {
+  stream?: NodeJS.WriteStream;
 }
 
 const GROUP_TITLES: Record<string, string> = {
@@ -17,15 +22,19 @@ const GROUP_TITLES: Record<string, string> = {
   js: "JS"
 };
 
-function usageLines(feature: Detection, limit: number): string[] {
+function usageLines(
+  feature: Detection,
+  limit: number,
+  colors: Colors
+): string[] {
   const usages = feature.usages.slice(0, limit);
   const lines = usages.map((usage) => {
-    const snippet = usage.snippet ? `  ${pc.dim(usage.snippet)}` : "";
+    const snippet = usage.snippet ? `  ${colors.dim(usage.snippet)}` : "";
     return `    ${usage.file}:${usage.line}:${usage.column}${snippet}`;
   });
   const remaining = feature.usages.length - usages.length;
   if (remaining > 0) {
-    lines.push(`    ${pc.dim(`... and ${remaining} more`)}`);
+    lines.push(`    ${colors.dim(`... and ${remaining} more`)}`);
   }
   return lines;
 }
@@ -39,8 +48,10 @@ export function printScanReport(
     return;
   }
 
+  const stream = options.stream ?? process.stderr;
+  const colors = createColors(stream);
   const lines: string[] = [];
-  lines.push(pc.bold(`featurescan ${VERSION}`));
+  lines.push(colors.bold(`featurescan ${VERSION}`));
   const duration =
     options.durationMs === undefined ? "" : ` in ${options.durationMs} ms`;
   lines.push(
@@ -54,7 +65,7 @@ export function printScanReport(
     if (options.out) {
       lines.push(`Manifest written to ${options.out}`);
     }
-    process.stderr.write(`${lines.join("\n")}\n`);
+    stream.write(`${lines.join("\n")}\n`);
     return;
   }
 
@@ -76,22 +87,18 @@ export function printScanReport(
       continue;
     }
     lines.push("");
-    lines.push(pc.bold(`${GROUP_TITLES[group]} (${features.length})`));
+    lines.push(colors.bold(`${GROUP_TITLES[group]} (${features.length})`));
     for (const feature of features) {
-      lines.push(`  ${pc.cyan(describeKey(feature.key))}`);
+      lines.push(`  ${colors.cyan(describeKey(feature.key))}`);
       if (options.verbose) {
-        lines.push(...usageLines(feature, 3));
+        lines.push(...usageLines(feature, 3, colors));
       }
     }
   }
 
   if (result.diagnostics.length > 0) {
     lines.push("");
-    lines.push(
-      pc.yellow(
-        `Warnings (${result.diagnostics.length}):`
-      )
-    );
+    lines.push(colors.yellow(`Warnings (${result.diagnostics.length}):`));
     for (const diagnostic of result.diagnostics.slice(0, 20)) {
       const location = diagnostic.file ? `${diagnostic.file}: ` : "";
       lines.push(`  ${location}${diagnostic.message}`);
@@ -106,7 +113,7 @@ export function printScanReport(
     lines.push(`Manifest written to ${options.out}`);
   }
 
-  process.stderr.write(`${lines.join("\n")}\n`);
+  stream.write(`${lines.join("\n")}\n`);
 }
 
 function issueDetail(issue: CheckIssue): string {
@@ -142,22 +149,27 @@ function issueDetail(issue: CheckIssue): string {
   }
 }
 
-export function printCheckReport(result: CheckResult): void {
+export function printCheckReport(
+  result: CheckResult,
+  options: CheckReportOptions = {}
+): void {
+  const stream = options.stream ?? process.stdout;
+  const colors = createColors(stream);
   const lines: string[] = [];
 
   for (const target of result.targets) {
     lines.push(
-      pc.bold(`${target.browserName} ${target.version}`) +
-        pc.dim(
+      colors.bold(`${target.browserName} ${target.version}`) +
+        colors.dim(
           `  ${target.supported} supported, ${target.unsupported.length} unsupported, ${target.warnings.length} warnings`
         )
     );
 
     if (target.unsupported.length > 0) {
-      lines.push(pc.red(`  Unsupported (${target.unsupported.length})`));
+      lines.push(colors.red(`  Unsupported (${target.unsupported.length})`));
       for (const issue of target.unsupported) {
         lines.push(
-          `    ${pc.red("x")} ${describeKey(issue.key)} ${pc.dim(
+          `    ${colors.red("x")} ${describeKey(issue.key)} ${colors.dim(
             `(${issueDetail(issue)})`
           )}`
         );
@@ -165,10 +177,10 @@ export function printCheckReport(result: CheckResult): void {
     }
 
     if (target.warnings.length > 0) {
-      lines.push(pc.yellow(`  Warnings (${target.warnings.length})`));
+      lines.push(colors.yellow(`  Warnings (${target.warnings.length})`));
       for (const issue of target.warnings) {
         lines.push(
-          `    ${pc.yellow("!")} ${describeKey(issue.key)} ${pc.dim(
+          `    ${colors.yellow("!")} ${describeKey(issue.key)} ${colors.dim(
             `(${issueDetail(issue)})`
           )}`
         );
@@ -176,10 +188,10 @@ export function printCheckReport(result: CheckResult): void {
     }
 
     if (target.unknown.length > 0) {
-      lines.push(pc.yellow(`  Unknown (${target.unknown.length})`));
+      lines.push(colors.yellow(`  Unknown (${target.unknown.length})`));
       for (const issue of target.unknown) {
         lines.push(
-          `    ${pc.yellow("?")} ${describeKey(issue.key)} ${pc.dim(
+          `    ${colors.yellow("?")} ${describeKey(issue.key)} ${colors.dim(
             `(${issueDetail(issue)})`
           )}`
         );
@@ -191,7 +203,7 @@ export function printCheckReport(result: CheckResult): void {
       target.warnings.length === 0 &&
       target.unknown.length === 0
     ) {
-      lines.push(pc.green("  All features supported."));
+      lines.push(colors.green("  All features supported."));
     }
 
     lines.push("");
@@ -199,7 +211,7 @@ export function printCheckReport(result: CheckResult): void {
 
   if (result.unknownKeys.length > 0) {
     lines.push(
-      pc.yellow(`Unknown feature keys (${result.unknownKeys.length}):`)
+      colors.yellow(`Unknown feature keys (${result.unknownKeys.length}):`)
     );
     for (const key of result.unknownKeys) {
       lines.push(`  ${key}`);
@@ -207,7 +219,7 @@ export function printCheckReport(result: CheckResult): void {
     lines.push("");
   }
 
-  process.stdout.write(`${lines.join("\n").trimEnd()}\n`);
+  stream.write(`${lines.join("\n").trimEnd()}\n`);
 }
 
 export function formatCheckJson(result: CheckResult): string {
