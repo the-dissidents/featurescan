@@ -1,3 +1,4 @@
+import picomatch from "picomatch";
 import type { CompatDB } from "../compat/bcd";
 import {
   compareVersions,
@@ -5,12 +6,25 @@ import {
   type SupportEvaluation,
   type SupportState
 } from "../compat/support";
+import type { Usage } from "../types";
 import { compareStrings } from "../util";
 
 export interface BrowserTarget {
   browser: string;
   version: string;
 }
+
+export interface CheckFeature {
+  key: string;
+  usages?: Usage[];
+}
+
+export interface CheckOptions {
+  ignoreSources?: string[];
+  dependencySources?: string[];
+}
+
+export const DEFAULT_DEPENDENCY_SOURCES = ["**/node_modules/**"];
 
 export interface CheckIssue {
   key: string;
@@ -23,6 +37,8 @@ export interface CheckIssue {
   prefixes?: string[];
   alternativeName?: string;
   reason?: string;
+  usages?: Usage[];
+  sourcePaths?: string[];
 }
 
 export interface TargetResult extends BrowserTarget {
@@ -31,6 +47,8 @@ export interface TargetResult extends BrowserTarget {
   unsupported: CheckIssue[];
   warnings: CheckIssue[];
   unknown: CheckIssue[];
+  ignored: CheckIssue[];
+  dependencies: CheckIssue[];
 }
 
 export interface CheckResult {
@@ -96,12 +114,110 @@ function cssPrefixMarker(
   return { baseKey, prefix };
 }
 
-export function checkManifest(
-  keys: string[],
+type Matcher = (value: string) => boolean;
+type SourceClassification = "none" | "ignored" | "dependency";
+
+const ISSUE_STATE_ORDER: Record<SupportState, number> = {
+  unsupported: 0,
+  partial: 1,
+  flagged: 2,
+  prefixed: 3,
+  alternative: 4,
+  unknown: 5,
+  supported: 6
+};
+
+function compileMatchers(globs: string[] | undefined): Matcher[] {
+  return (globs ?? []).map((glob) => picomatch(glob, { dot: true }));
+}
+
+function sourcePath(usage: Usage): string {
+  const value = (usage.source?.file ?? usage.file).replaceAll("\\", "/");
+  const parts: string[] = [];
+
+  for (const part of value.split("/")) {
+    if (!part || part === ".") {
+      continue;
+    }
+    if (part === "..") {
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+
+  return parts.join("/");
+}
+
+function matchesAny(value: string, matchers: Matcher[]): boolean {
+  return matchers.some((match) => match(value));
+}
+
+function displaySources(
+  usages: Usage[] | undefined,
+  classification: SourceClassification,
+  dependencyMatchers: Matcher[]
+): string[] | undefined {
+  if (!usages || usages.length === 0) {
+    return undefined;
+  }
+
+  const sources = [...new Set(usages.map(sourcePath))].sort(compareStrings);
+  const display =
+    classification === "none"
+      ? sources.filter((source) => !matchesAny(source, dependencyMatchers))
+      : sources;
+
+  return display.length > 0 ? display : undefined;
+}
+
+function classifyUsages(
+  usages: Usage[] | undefined,
+  ignoreMatchers: Matcher[],
+  dependencyMatchers: Matcher[]
+): SourceClassification {
+  if (!usages || usages.length === 0) {
+    return "none";
+  }
+
+  const sources = usages.map(sourcePath);
+  if (
+    ignoreMatchers.length > 0 &&
+    sources.every((source) => ignoreMatchers.some((match) => match(source)))
+  ) {
+    return "ignored";
+  }
+  if (
+    dependencyMatchers.length > 0 &&
+    sources.every((source) => dependencyMatchers.some((match) => match(source)))
+  ) {
+    return "dependency";
+  }
+  return "none";
+}
+
+export function checkFeatures(
+  features: CheckFeature[],
   targets: BrowserTarget[],
-  compat: CompatDB
+  compat: CompatDB,
+  options: CheckOptions = {}
 ): CheckResult {
-  const uniqueKeys = [...new Set(keys)].sort(compareStrings);
+  const usageByKey = new Map<string, Usage[] | undefined>();
+  for (const feature of features) {
+    if (!usageByKey.has(feature.key)) {
+      usageByKey.set(
+        feature.key,
+        feature.usages ? [...feature.usages] : undefined
+      );
+    } else if (feature.usages) {
+      usageByKey.set(feature.key, [
+        ...(usageByKey.get(feature.key) ?? []),
+        ...feature.usages
+      ]);
+    }
+  }
+
+  const uniqueKeys = [...usageByKey.keys()].sort(compareStrings);
   const unknownKeys: string[] = [];
   const knownKeys: string[] = [];
   const prefixMarkers = new Map<string, Set<string>>();
@@ -121,10 +237,18 @@ export function checkManifest(
     }
   }
 
+  const ignoreMatchers = compileMatchers(options.ignoreSources);
+  const dependencyMatchers = compileMatchers([
+    ...DEFAULT_DEPENDENCY_SOURCES,
+    ...(options.dependencySources ?? [])
+  ]);
+
   const targetResults: TargetResult[] = targets.map((target) => {
     const unsupported: CheckIssue[] = [];
     const warnings: CheckIssue[] = [];
     const unknown: CheckIssue[] = [];
+    const ignored: CheckIssue[] = [];
+    const dependencies: CheckIssue[] = [];
     let supported = 0;
 
     for (const key of knownKeys) {
@@ -133,17 +257,50 @@ export function checkManifest(
         target.browser,
         target.version
       );
-      const issue: CheckIssue = { key, ...evaluation };
+      const usages = usageByKey.get(key);
+
       if (evaluation.state === "supported") {
         supported += 1;
-      } else if (
+        continue;
+      }
+
+      if (
         evaluation.state === "prefixed" &&
         (evaluation.prefixes ?? (evaluation.prefix ? [evaluation.prefix] : [])).some(
           (prefix) => prefixMarkers.get(key)?.has(prefix)
         )
       ) {
         supported += 1;
-      } else if (evaluation.state === "unsupported") {
+        continue;
+      }
+
+      const classification = classifyUsages(
+        usages,
+        ignoreMatchers,
+        dependencyMatchers
+      );
+      const sourcePaths = displaySources(
+        usages,
+        classification,
+        dependencyMatchers
+      );
+      const issue: CheckIssue = {
+        key,
+        ...evaluation,
+        ...(usages ? { usages } : {}),
+        ...(sourcePaths ? { sourcePaths } : {})
+      };
+
+      if (classification === "ignored") {
+        ignored.push(issue);
+        continue;
+      }
+      if (classification === "dependency") {
+        dependencies.push(issue);
+        continue;
+      }
+
+      if (evaluation.state === "unsupported") {
         unsupported.push(issue);
       } else if (WARNING_STATES.has(evaluation.state)) {
         warnings.push(issue);
@@ -154,6 +311,9 @@ export function checkManifest(
 
     const byKey = (a: CheckIssue, b: CheckIssue) =>
       compareStrings(a.key, b.key);
+    const byDependency = (a: CheckIssue, b: CheckIssue) =>
+      ISSUE_STATE_ORDER[a.state] - ISSUE_STATE_ORDER[b.state] ||
+      compareStrings(a.key, b.key);
 
     return {
       ...target,
@@ -161,9 +321,23 @@ export function checkManifest(
       supported,
       unsupported: unsupported.sort(compareUnsupported),
       warnings: warnings.sort(byKey),
-      unknown: unknown.sort(byKey)
+      unknown: unknown.sort(byKey),
+      ignored: ignored.sort(byKey),
+      dependencies: dependencies.sort(byDependency)
     };
   });
 
   return { targets: targetResults, unknownKeys };
+}
+
+export function checkManifest(
+  keys: string[],
+  targets: BrowserTarget[],
+  compat: CompatDB
+): CheckResult {
+  return checkFeatures(
+    keys.map((key) => ({ key })),
+    targets,
+    compat
+  );
 }

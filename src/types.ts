@@ -2,11 +2,19 @@ export type FeatureKind = "html" | "css" | "js";
 
 export type Confidence = "high" | "medium" | "low";
 
+export interface OriginalLocation {
+  file: string;
+  line: number;
+  column: number;
+  name?: string;
+}
+
 export interface Usage {
   file: string;
   line: number;
   column: number;
   snippet?: string;
+  source?: OriginalLocation;
 }
 
 export interface Detection {
@@ -45,4 +53,5 @@ export interface ScanResult {
   diagnostics: Diagnostic[];
 }
 
-export type ManifestFormat = "json" | "lines";
+export type ManifestFormat = "json" | "lines" | "detailed";
+export type KeyManifestFormat = Exclude<ManifestFormat, "detailed">;

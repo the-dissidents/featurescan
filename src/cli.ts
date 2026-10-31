@@ -1,13 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { cac } from "cac";
-import { checkManifest } from "./check/index";
+import { checkFeatures } from "./check/index";
 import { resolveTargets } from "./check/targets";
 import { CompatDB } from "./compat/bcd";
 import {
+  formatDetailedManifest,
   formatManifest,
   manifestKeys,
-  parseManifest
+  parseManifestData
 } from "./manifest";
 import { ProgressBar } from "./report/progress";
 import {
@@ -36,6 +37,8 @@ interface CheckCliOptions {
   fail?: boolean;
   quiet?: boolean;
   listBrowsers?: boolean;
+  ignoreSource?: string[] | string;
+  dependencySource?: string[] | string;
 }
 
 function stringArray(value: string[] | string | undefined): string[] {
@@ -61,8 +64,8 @@ async function runScan(
   options: ScanCliOptions
 ): Promise<void> {
   const format = (options.format ?? "json") as ManifestFormat;
-  if (format !== "json" && format !== "lines") {
-    throw new Error('--format must be "json" or "lines"');
+  if (format !== "json" && format !== "lines" && format !== "detailed") {
+    throw new Error('--format must be "json", "lines", or "detailed"');
   }
 
   const started = Date.now();
@@ -74,13 +77,17 @@ async function runScan(
     options.progress !== false &&
     process.env.TERM !== "dumb";
   const progress = new ProgressBar(process.stderr, showProgress);
+  const maxUsages =
+    format === "detailed" && options.maxUsages === undefined
+      ? 0
+      : parseMaxUsages(options.maxUsages);
 
   const result = await (async () => {
     try {
       return await scan(rootArg ?? ".", {
         include: stringArray(options.include),
         exclude: stringArray(options.exclude),
-        maxUsages: parseMaxUsages(options.maxUsages),
+        maxUsages,
         onProgress: showProgress
           ? (state) => progress.update(state)
           : undefined
@@ -91,7 +98,10 @@ async function runScan(
   })();
 
   const keys = manifestKeys(result);
-  const output = formatManifest(keys, format);
+  const output =
+    format === "detailed"
+      ? formatDetailedManifest(result)
+      : formatManifest(keys, format);
 
   if (writeToFile && out) {
     const target = path.resolve(out);
@@ -132,9 +142,24 @@ async function runCheck(
   }
 
   const source = await readFile(manifestFile, "utf8");
-  const keys = parseManifest(source);
+  const manifest = parseManifestData(source);
+  const ignoreSources = stringArray(options.ignoreSource);
+  const dependencySources = stringArray(options.dependencySource);
+
+  if (
+    !manifest.detailed &&
+    (ignoreSources.length > 0 || dependencySources.length > 0)
+  ) {
+    throw new Error(
+      "--ignore-source and --dependency-source require a detailed manifest; use scan --format detailed"
+    );
+  }
+
   const targets = resolveTargets(stringArray(options.browser), compat);
-  const result = checkManifest(keys, targets, compat);
+  const result = checkFeatures(manifest.features, targets, compat, {
+    ignoreSources,
+    dependencySources
+  });
 
   if (options.json) {
     process.stdout.write(formatCheckJson(result));
@@ -160,18 +185,23 @@ export async function main(argv = process.argv): Promise<void> {
       "-o, --out <file>",
       "write the manifest to a file and print the report to stdout"
     )
-    .option("--format <format>", 'manifest format: "json" or "lines"', {
-      default: "json"
-    })
+    .option(
+      "--format <format>",
+      'manifest format: "json", "lines", or "detailed"',
+      {
+        default: "json"
+      }
+    )
     .option("--include <glob>", "include glob (repeatable)", {
       type: [String]
     })
     .option("--exclude <glob>", "exclude glob (repeatable)", {
       type: [String]
     })
-    .option("--max-usages <count>", "maximum usage locations per feature", {
-      default: 50
-    })
+    .option(
+      "--max-usages <count>",
+      "maximum usage locations per feature (0 = unlimited; detailed defaults to unlimited)"
+    )
     .option("-v, --verbose", "show usage locations in the report")
     .option("-q, --quiet", "suppress the report and progress bar")
     .option("--no-progress", "disable the progress bar")
@@ -185,6 +215,16 @@ export async function main(argv = process.argv): Promise<void> {
     .option("--browser <spec>", "browser@version target (repeatable)", {
       type: [String]
     })
+    .option(
+      "--ignore-source <glob>",
+      "ignore issues whose usages all match this source glob (repeatable)",
+      { type: [String] }
+    )
+    .option(
+      "--dependency-source <glob>",
+      "classify issues whose usages all match this source glob as dependencies (repeatable; default: **/node_modules/**)",
+      { type: [String] }
+    )
     .option("--json", "print machine-readable JSON")
     .option("--fail", "exit with code 2 when unsupported features are found")
     .option("-q, --quiet", "suppress the human-readable report")

@@ -2,6 +2,7 @@ import { parse, type ParserPlugin } from "@babel/parser";
 import traverse, { type Scope } from "@babel/traverse";
 import type { NodePath } from "@babel/traverse";
 import type * as t from "@babel/types";
+import type { SourceMapConsumer } from "source-map";
 import {
   GLOBAL_FUNCTION_KEYS,
   GLOBAL_OBJECT_INTERFACES,
@@ -16,6 +17,7 @@ import type { Confidence, Usage } from "../types";
 import type { ScanContext } from "./context";
 import { addFeature, warn } from "./context";
 import { makeUsage } from "./source";
+import { normalizeOriginalSource } from "./sourcemap";
 
 const PLUGINS: ParserPlugin[] = [
   "jsx",
@@ -39,6 +41,7 @@ export interface JsScanInput {
   base?: JsBasePosition;
   allowReturnOutsideFunction?: boolean;
   allowAwaitOutsideFunction?: boolean;
+  sourceMap?: SourceMapConsumer;
 }
 
 function localPosition(
@@ -58,7 +61,8 @@ function usageFor(
   node: t.Node,
   file: string,
   source: string,
-  base: JsBasePosition | undefined
+  base: JsBasePosition | undefined,
+  sourceMap: SourceMapConsumer | undefined
 ): Usage | undefined {
   const start = node.loc?.start;
   if (!start) {
@@ -67,7 +71,41 @@ function usageFor(
   const line = start.line;
   const column = start.column + 1;
   const local = localPosition(line, column, base);
-  return makeUsage(file, line, column, source, local.line, local.column);
+  const usage = makeUsage(
+    file,
+    line,
+    column,
+    source,
+    local.line,
+    local.column
+  );
+
+  if (!sourceMap) {
+    return usage;
+  }
+
+  try {
+    const original = sourceMap.originalPositionFor({
+      line,
+      column: start.column
+    });
+    if (
+      original.source &&
+      original.line !== null &&
+      original.column !== null
+    ) {
+      usage.source = {
+        file: normalizeOriginalSource(original.source),
+        line: original.line,
+        column: original.column + 1,
+        ...(original.name ? { name: original.name } : {})
+      };
+    }
+  } catch {
+    // Ignore malformed mappings and keep the generated location.
+  }
+
+  return usage;
 }
 
 function propertyName(
@@ -209,7 +247,7 @@ export function scanJs(input: JsScanInput): void {
     node: t.Node,
     confidence: Confidence = "high"
   ) => {
-    const usage = usageFor(node, file, source, base);
+    const usage = usageFor(node, file, source, base, input.sourceMap);
     if (usage) {
       addFeature(context, key, "js", usage, confidence);
     }
@@ -255,6 +293,7 @@ export function scanJs(input: JsScanInput): void {
       return;
     }
 
+    const usageNode = node.property;
     const objectPath = globalObjectPath(node.object, path.scope);
     let handled = false;
 
@@ -264,7 +303,7 @@ export function scanJs(input: JsScanInput): void {
       if (interfaceName) {
         const key = context.compat.interfaceMember(interfaceName, name);
         if (key) {
-          add(key, node);
+          add(key, usageNode);
           handled = true;
         }
       }
@@ -274,7 +313,7 @@ export function scanJs(input: JsScanInput): void {
           context.compat.interfaceMember("Window", name) ??
           context.compat.apiGlobal(name);
         if (key) {
-          add(key, node);
+          add(key, usageNode);
           handled = true;
         }
       }
@@ -282,19 +321,19 @@ export function scanJs(input: JsScanInput): void {
       if (stripped === "WebAssembly") {
         const key = context.compat.webAssemblyStatic(name);
         if (key) {
-          add(key, node);
+          add(key, usageNode);
           handled = true;
         }
       } else if (context.compat.builtinGlobal(stripped)) {
         const key = context.compat.builtinStatic(stripped, name);
         if (key) {
-          add(key, node);
+          add(key, usageNode);
           handled = true;
         }
       } else if (context.compat.apiGlobal(stripped)) {
         const key = context.compat.interfaceMember(stripped, name);
         if (key) {
-          add(key, node);
+          add(key, usageNode);
           handled = true;
         }
       }
@@ -305,8 +344,8 @@ export function scanJs(input: JsScanInput): void {
     }
 
     if (isCallCallee(path)) {
-      addBuiltinInstanceMethods(name, node);
-      addApiInstanceMethods(name, node);
+      addBuiltinInstanceMethods(name, usageNode);
+      addApiInstanceMethods(name, usageNode);
     }
   };
 

@@ -5,16 +5,17 @@ Status: v0.1 implementation complete (scan + report + check).
 ## Goal
 
 Scan a built static site or HTML/JS desktop app and emit a manifest of web
-platform features. The manifest is deliberately a plain list of keys, mostly
-MDN browser-compat-data (BCD) keys plus synthetic vendor-prefix markers:
+platform features. The default manifest is a plain list of keys, mostly MDN
+browser-compat-data (BCD) keys plus synthetic vendor-prefix markers:
 
 ```json
 ["api.IntersectionObserver", "css.properties.backdrop-filter", "html.elements.dialog"]
 ```
 
-Compatibility metadata and usage locations are used by the CLI report, but are
-not written into the manifest. A future runtime checker script can be generated
-from the keys.
+Compatibility metadata is resolved by the CLI. Usage locations and source-map
+origins can be written with `--format detailed`; the default keys-only manifest
+remains the runtime-checker input. A future runtime checker script can be
+generated from the keys.
 
 ## Pipeline
 
@@ -25,8 +26,9 @@ discover files
        -> inline JS scanner (Babel)
   -> CSS scanner (css-tree)
   -> JS scanner (Babel + scope analysis)
-  -> Catalog (dedupe by key, keep usages/confidence)
-  -> sorted key list
+       -> local/data source maps via `source-map`
+  -> Catalog (dedupe by key, keep usages/confidence/source origins)
+  -> sorted key list or detailed manifest
 ```
 
 Parsers:
@@ -37,6 +39,9 @@ Parsers:
 - JS: `@babel/parser` plus `@babel/traverse` for binding-aware global
   detection. Babel was chosen over `oxc-parser` for mature scope analysis; the
   scanner is isolated so it can be swapped later.
+- Source maps: `source-map`, resolved from `sourceMappingURL` comments in JS.
+  Local files, `file:` URLs, and data URLs are supported; remote maps are
+  ignored. Each JS usage gains an optional original location.
 
 Build/tooling:
 
@@ -55,6 +60,17 @@ Build/tooling:
 - Report colors are derived from the report's destination stream, not stdout,
   so redirected manifests do not strip color from a TTY report.
 - `--no-color` and `NO_COLOR` disable colors.
+- `--format detailed` emits `{ schemaVersion, tool, features }` with usage
+  locations and source-map origins. Detailed scans default to unlimited usages
+  so source-based filtering sees every origin.
+- Detailed `check` output separates issues whose usages all originate from
+  `node_modules` into a `Dependencies` category by default.
+  `--dependency-source <glob>` adds more dependency paths, and
+  `--ignore-source <glob>` removes matching issues. They apply only when every
+  usage matches; mixed first-party/dependency usage keeps the issue in its
+  normal category. Dependency issues do not trigger `--fail`. Displayed source paths are filtered
+per category: primary issues omit dependency sources, while dependency issues
+show their dependency sources.
 
 ## Detection rules
 
@@ -119,6 +135,10 @@ matching synthetic prefix marker for any qualifying prefix, the prefixed
 warning is suppressed and the feature is counted as covered. Synthetic markers
 are excluded from feature evaluation and unknown-key reporting.
 
+Source classification uses the mapped original path when present, otherwise the
+generated file path. `check` rejects source-filter options for keys-only
+manifests because there is no usage information to evaluate.
+
 Unsupported issues with no support at all are listed first; the rest are sorted
 by their `version_added` value descending (newest support requirement first),
 with key order as the tiebreaker.
@@ -153,5 +173,7 @@ This avoids blocking on ambiguous method names while still surfacing them.
 - Fixture-site end-to-end scan and manifest round-trip.
 - Check command/target resolution tests.
 - Progress bar and destination-stream color tests.
+- Source-map mapping and detailed-manifest round-trip tests.
+- Source-based dependency classification and ignore tests.
 
 Run with `pnpm test`, `pnpm typecheck`, and `pnpm build`.

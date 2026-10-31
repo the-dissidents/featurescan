@@ -1,3 +1,16 @@
+export {
+  checkFeatures,
+  checkManifest,
+  DEFAULT_DEPENDENCY_SOURCES
+} from "./check/index";
+export type {
+  BrowserTarget,
+  CheckFeature,
+  CheckIssue,
+  CheckOptions,
+  CheckResult,
+  TargetResult
+} from "./check/index";
 export { CompatDB } from "./compat/bcd";
 export type {
   BcdData,
@@ -7,9 +20,15 @@ export type {
 export { evaluateSupport, parseVersion } from "./compat/support";
 export type { SupportEvaluation, SupportState } from "./compat/support";
 export {
+  formatDetailedManifest,
   formatManifest,
   manifestKeys,
-  parseManifest
+  parseManifest,
+  parseManifestData
+} from "./manifest";
+export type {
+  ManifestFeature,
+  ParsedManifest
 } from "./manifest";
 export { scan } from "./scan/index";
 export { Catalog } from "./scan/catalog";
@@ -18,7 +37,9 @@ export type {
   Detection,
   Diagnostic,
   FeatureKind,
+  KeyManifestFormat,
   ManifestFormat,
+  OriginalLocation,
   ScanOptions,
   ScanPhase,
   ScanProgress,

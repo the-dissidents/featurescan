@@ -30,7 +30,14 @@ function usageLines(
   const usages = feature.usages.slice(0, limit);
   const lines = usages.map((usage) => {
     const snippet = usage.snippet ? `  ${colors.dim(usage.snippet)}` : "";
-    return `    ${usage.file}:${usage.line}:${usage.column}${snippet}`;
+    const source = usage.source
+      ? ` ${colors.cyan(
+          `-> ${usage.source.file}:${usage.source.line}:${usage.source.column}${
+            usage.source.name ? ` (${usage.source.name})` : ""
+          }`
+        )}`
+      : "";
+    return `    ${usage.file}:${usage.line}:${usage.column}${source}${snippet}`;
   });
   const remaining = feature.usages.length - usages.length;
   if (remaining > 0) {
@@ -116,6 +123,29 @@ export function printScanReport(
   stream.write(`${lines.join("\n")}\n`);
 }
 
+function issueSources(issue: CheckIssue, colors: Colors): string {
+  const sources = issue.sourcePaths;
+  if (!sources || sources.length === 0) {
+    return "";
+  }
+  const shown = sources.slice(0, 3).join(", ");
+  const remaining = sources.length - 3;
+  return colors.dim(
+    ` [${shown}${remaining > 0 ? `, +${remaining}` : ""}]`
+  );
+}
+
+function issueMarker(issue: CheckIssue, colors: Colors): string {
+  switch (issue.state) {
+    case "unsupported":
+      return colors.red("x");
+    case "unknown":
+      return colors.yellow("?");
+    default:
+      return colors.yellow("!");
+  }
+}
+
 function issueDetail(issue: CheckIssue): string {
   switch (issue.state) {
     case "partial":
@@ -158,10 +188,16 @@ export function printCheckReport(
   const lines: string[] = [];
 
   for (const target of result.targets) {
+    const dependencyText =
+      target.dependencies.length > 0
+        ? `, ${target.dependencies.length} dependencies`
+        : "";
+    const ignoredText =
+      target.ignored.length > 0 ? `, ${target.ignored.length} ignored` : "";
     lines.push(
       colors.bold(`${target.browserName} ${target.version}`) +
         colors.dim(
-          `  ${target.supported} supported, ${target.unsupported.length} unsupported, ${target.warnings.length} warnings`
+          `  ${target.supported} supported, ${target.unsupported.length} unsupported, ${target.warnings.length} warnings${dependencyText}${ignoredText}`
         )
     );
 
@@ -171,7 +207,7 @@ export function printCheckReport(
         lines.push(
           `    ${colors.red("x")} ${describeKey(issue.key)} ${colors.dim(
             `(${issueDetail(issue)})`
-          )}`
+          )}${issueSources(issue, colors)}`
         );
       }
     }
@@ -182,7 +218,7 @@ export function printCheckReport(
         lines.push(
           `    ${colors.yellow("!")} ${describeKey(issue.key)} ${colors.dim(
             `(${issueDetail(issue)})`
-          )}`
+          )}${issueSources(issue, colors)}`
         );
       }
     }
@@ -193,7 +229,29 @@ export function printCheckReport(
         lines.push(
           `    ${colors.yellow("?")} ${describeKey(issue.key)} ${colors.dim(
             `(${issueDetail(issue)})`
-          )}`
+          )}${issueSources(issue, colors)}`
+        );
+      }
+    }
+
+    if (target.dependencies.length > 0) {
+      lines.push(colors.yellow(`  Dependencies (${target.dependencies.length})`));
+      for (const issue of target.dependencies) {
+        lines.push(
+          `    ${issueMarker(issue, colors)} ${describeKey(issue.key)} ${colors.dim(
+            `(${issueDetail(issue)})`
+          )}${issueSources(issue, colors)}`
+        );
+      }
+    }
+
+    if (target.ignored.length > 0) {
+      lines.push(colors.dim(`  Ignored (${target.ignored.length})`));
+      for (const issue of target.ignored) {
+        lines.push(
+          `    ${colors.dim("-")} ${describeKey(issue.key)} ${colors.dim(
+            `(${issueDetail(issue)})`
+          )}${issueSources(issue, colors)}`
         );
       }
     }
@@ -203,7 +261,15 @@ export function printCheckReport(
       target.warnings.length === 0 &&
       target.unknown.length === 0
     ) {
-      lines.push(colors.green("  All features supported."));
+      lines.push(
+        colors.green(
+          target.dependencies.length > 0
+            ? "  All first-party features supported."
+            : target.ignored.length > 0
+              ? "  All non-ignored features supported."
+              : "  All features supported."
+        )
+      );
     }
 
     lines.push("");

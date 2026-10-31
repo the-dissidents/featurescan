@@ -15,8 +15,9 @@ used for runtime compatibility checks.
 ]
 ```
 
-The manifest intentionally contains only keys. Compatibility details are
-resolved by the CLI when it prints a report or runs `check`.
+The default manifest intentionally contains only keys. Compatibility details
+are resolved by the CLI when it prints a report or runs `check`. An opt-in
+detailed manifest can also carry usage locations and source-map origins.
 
 Vendor-prefixed CSS properties are recorded alongside their unprefixed key using
 a synthetic marker, for example:
@@ -51,14 +52,18 @@ featurescan scan ./dist -o features.json --no-progress
 # Newline-delimited output
 featurescan scan ./dist --format lines -o features.txt
 
+# Detailed output with usages and source-map origins
+featurescan scan ./dist --format detailed -o features-detailed.json
+
 # Custom discovery
 featurescan scan ./dist --include '**/*.html' --exclude 'legacy/**'
 ```
 
 `scan` accepts a directory or a single file. By default it scans
 `**/*.{html,htm,css,js,mjs,cjs}` and ignores `node_modules`, `.git`, and source
-maps. Inline `<style>`, `<script>`, `style=""`, and common `on*` handlers are
-scanned as well.
+map files as standalone inputs. Inline `<style>`, `<script>`, `style=""`, and
+common `on*` handlers are scanned as well. Referenced JS source maps are read
+when available.
 
 Without `-o`, the manifest goes to stdout and the report to stderr, so the
 manifest can be piped. With `-o`, the manifest is written to the file and the
@@ -80,6 +85,12 @@ featurescan check features.json --browser safari@15.6 --json
 
 # Fail CI when anything is unsupported
 featurescan check features.json --browser safari@15.6 --fail
+
+# With a detailed manifest, ignore issues from matching sources entirely
+featurescan check features-detailed.json --ignore-source '**/node_modules/**'
+
+# Classify additional paths as dependencies
+featurescan check features-detailed.json --dependency-source 'vendor/**'
 ```
 
 `--browser` accepts `name@version`, `name` (latest stable), or `name@latest`.
@@ -90,6 +101,16 @@ Prefixed-CSS warnings are suppressed when the manifest contains a matching
 `-webkit-`, `-moz-`, `-ms-`, `-o-`, or `-khtml-` marker for that property.
 Unsupported features are sorted with never-supported features first, then by
 the version that introduced support, newest first.
+
+Issues whose usages all originate from `node_modules` are moved to a separate
+`Dependencies` category by default. `--dependency-source <glob>` adds more
+dependency paths, and `--ignore-source <glob>` removes matching issues
+entirely. These only apply when **all** usages of a feature match, so a feature
+also used by first-party code stays in its normal category. Dependency issues
+do not trigger `--fail`. Source matching uses the original source-map path when
+available, otherwise the built file path. Source lists shown next to issues are
+filtered to their category, so dependency paths do not appear under primary
+unsupported/warning/unknown lists.
 
 Exit codes:
 
@@ -131,14 +152,62 @@ Exit codes:
   import attributes, `using` declarations, regex flags and assertions, and more
 - Shadowed identifiers are ignored using Babel scope analysis
 
+## Detailed manifests and source maps
+
+`--format detailed` produces a JSON object instead of a key list:
+
+```json
+{
+  "schemaVersion": 1,
+  "tool": { "name": "featurescan", "version": "0.1.0" },
+  "features": [
+    {
+      "key": "api.IntersectionObserver",
+      "kind": "js",
+      "confidence": "high",
+      "usages": [
+        {
+          "file": "assets/app.js",
+          "line": 1,
+          "column": 20,
+          "source": {
+            "file": "src/observer.ts",
+            "line": 10,
+            "column": 5
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+JS `//# sourceMappingURL=` and `/*# sourceMappingURL=... */` comments are
+resolved from local files, `file:` URLs, and data URLs. Remote source maps are
+ignored. Verbose scan reports show the mapped location as
+`generated -> original`.
+
+Detailed manifests default to unlimited usages so source filtering sees every
+origin; pass `--max-usages <n>` to cap them. Keys-only manifests remain the
+default for runtime compatibility checks.
+
 ## Library API
 
 ```ts
-import { scan, manifestKeys, CompatDB, formatManifest } from "featurescan";
+import {
+  scan,
+  manifestKeys,
+  CompatDB,
+  formatManifest,
+  formatDetailedManifest,
+  parseManifestData
+} from "featurescan";
 
 const result = await scan("./dist", { maxUsages: 20 });
 const keys = manifestKeys(result);
 const json = formatManifest(keys, "json");
+const detailed = formatDetailedManifest(result);
+const parsed = parseManifestData(detailed);
 
 // Resolve compatibility data directly
 const compat = new CompatDB();
@@ -154,7 +223,8 @@ implemented yet. The keys-only manifest is the input they are designed around.
 - All matching files are scanned; unused chunks and dead code can add features.
 - Bundled polyfills can appear as feature usage; use `--exclude` if needed.
 - JavaScript detection is syntactic, not type-aware.
-- Source maps and `.asar` archives are not handled.
+- Source maps are supported for JS only, not CSS.
+- Remote source maps and `.asar` archives are not handled.
 - Inline event handlers are parsed only for a known list of `on*` attributes.
 - A feature may be reported at medium confidence when the receiver type is
   unknown (for example `.at()` on an arbitrary object); this affects the report

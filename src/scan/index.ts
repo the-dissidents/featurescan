@@ -8,6 +8,7 @@ import { scanCss } from "./css";
 import { discover } from "./discover";
 import { scanHtml } from "./html";
 import { scanJs } from "./js";
+import { loadSourceMap } from "./sourcemap";
 
 export async function scan(
   rootInput: string,
@@ -74,7 +75,25 @@ export async function scan(
               : extension === ".cjs"
                 ? "script"
                 : "unambiguous";
-          scanJs({ file: relativeFile, source, context, sourceType });
+          const sourceMap = await loadSourceMap(file, source);
+          if (sourceMap.warning) {
+            diagnostics.push({
+              severity: "warning",
+              file: relativeFile,
+              message: sourceMap.warning
+            });
+          }
+          try {
+            scanJs({
+              file: relativeFile,
+              source,
+              context,
+              sourceType,
+              sourceMap: sourceMap.consumer
+            });
+          } finally {
+            sourceMap.consumer?.destroy();
+          }
           break;
         }
         default:

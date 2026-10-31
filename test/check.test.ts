@@ -1,11 +1,122 @@
 import { describe, expect, it } from "vitest";
-import { checkManifest } from "../src/check/index";
+import { checkFeatures, checkManifest } from "../src/check/index";
 import { resolveTargets, DEFAULT_BROWSERS } from "../src/check/targets";
 import { CompatDB } from "../src/compat/bcd";
 
 const compat = new CompatDB();
 
 describe("checkManifest", () => {
+  it("moves node_modules issues into the dependencies category by default", () => {
+    const target = [{ browser: "safari", version: "15.6" }];
+    const dependencyFeature = {
+      key: "css.properties.container-type",
+      usages: [
+        {
+          file: "dist/app.css",
+          line: 1,
+          column: 1,
+          source: {
+            file: "../../../../../../../../node_modules/.pnpm/@codemirror+view@6.43.13/node_modules/@codemirror/view/dist/index.css",
+            line: 2,
+            column: 3
+          }
+        }
+      ]
+    };
+
+    const result = checkFeatures([dependencyFeature], target, compat);
+    expect(result.targets[0]?.unsupported).toEqual([]);
+    expect(result.targets[0]?.warnings).toEqual([]);
+    expect(result.targets[0]?.dependencies.map((issue) => issue.key)).toEqual([
+      "css.properties.container-type"
+    ]);
+    expect(result.targets[0]?.dependencies[0]?.sourcePaths).toEqual([
+      "node_modules/.pnpm/@codemirror+view@6.43.13/node_modules/@codemirror/view/dist/index.css"
+    ]);
+
+    const mixed = checkFeatures(
+      [
+        {
+          ...dependencyFeature,
+          usages: [
+            ...dependencyFeature.usages,
+            {
+              file: "dist/app.css",
+              line: 10,
+              column: 1,
+              source: { file: "src/app.css", line: 20, column: 3 }
+            }
+          ]
+        }
+      ],
+      target,
+      compat
+    );
+    expect(mixed.targets[0]?.dependencies).toEqual([]);
+    expect(mixed.targets[0]?.unsupported[0]?.key).toBe(
+      "css.properties.container-type"
+    );
+    expect(mixed.targets[0]?.unsupported[0]?.sourcePaths).toEqual([
+      "src/app.css"
+    ]);
+  });
+
+  it("supports additional dependency source globs", () => {
+    const feature = {
+      key: "css.properties.container-type",
+      usages: [
+        {
+          file: "dist/app.css",
+          line: 1,
+          column: 1,
+          source: { file: "vendor/lib.css", line: 2, column: 3 }
+        }
+      ]
+    };
+    const target = [{ browser: "safari", version: "15.6" }];
+
+    const byDefault = checkFeatures([feature], target, compat);
+    expect(byDefault.targets[0]?.dependencies).toEqual([]);
+    expect(byDefault.targets[0]?.unsupported[0]?.key).toBe(
+      "css.properties.container-type"
+    );
+
+    const custom = checkFeatures([feature], target, compat, {
+      dependencySources: ["vendor/**"]
+    });
+    expect(custom.targets[0]?.unsupported).toEqual([]);
+    expect(custom.targets[0]?.dependencies[0]?.key).toBe(
+      "css.properties.container-type"
+    );
+  });
+
+  it("ignores issues from matching source files", () => {
+    const feature = {
+      key: "css.properties.container-type",
+      usages: [
+        {
+          file: "dist/app.css",
+          line: 1,
+          column: 1,
+          source: {
+            file: "../../../../../../../../node_modules/.pnpm/@codemirror+view@6.43.13/node_modules/@codemirror/view/dist/index.css",
+            line: 2,
+            column: 3
+          }
+        }
+      ]
+    };
+    const target = [{ browser: "safari", version: "15.6" }];
+    const ignored = checkFeatures([feature], target, compat, {
+      ignoreSources: ["**/node_modules/**"]
+    });
+    expect(ignored.targets[0]?.unsupported).toEqual([]);
+    expect(ignored.targets[0]?.dependencies).toEqual([]);
+    expect(ignored.targets[0]?.ignored.map((issue) => issue.key)).toEqual([
+      "css.properties.container-type"
+    ]);
+  });
+
   it("puts features with no support at all first", () => {
     const result = checkManifest(
       [
