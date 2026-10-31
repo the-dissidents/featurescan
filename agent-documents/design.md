@@ -63,6 +63,9 @@ Build/tooling:
 - `--format detailed` emits `{ schemaVersion, tool, features }` with usage
   locations and source-map origins. Detailed scans default to unlimited usages
   so source-based filtering sees every origin.
+- `check --group-by-kind` nests unsupported/warnings/unknown/dependencies/
+  ignored sections under HTML, CSS, and JS headings; the default flat layout
+  keeps those categories at target level.
 - Detailed `check` output separates issues whose usages all originate from
   `node_modules` into a `Dependencies` category by default.
   `--dependency-source <glob>` adds more dependency paths, and

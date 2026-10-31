@@ -80,6 +80,9 @@ featurescan check features.json
 # Check specific targets
 featurescan check features.json --browser safari@15.6 --browser chrome@120
 
+# Group issues under HTML, CSS, and JS
+featurescan check features.json --browser safari@15.6 --group-by-kind
+
 # Machine-readable output
 featurescan check features.json --browser safari@15.6 --json
 
@@ -96,6 +99,8 @@ featurescan check features-detailed.json --dependency-source 'vendor/**'
 `--browser` accepts `name@version`, `name` (latest stable), or `name@latest`.
 Aliases such as `ios` (for `safari_ios`) are supported. Use
 `--list-browsers` to see the available identifiers and latest versions.
+`--group-by-kind` nests the issue categories (unsupported, warnings, unknown,
+dependencies, ignored) under HTML, CSS, and JS headings.
 
 Prefixed-CSS warnings are suppressed when the manifest contains a matching
 `-webkit-`, `-moz-`, `-ms-`, `-o-`, or `-khtml-` marker for that property.

@@ -14,6 +14,7 @@ export interface ScanReportOptions {
 
 export interface CheckReportOptions {
   stream?: NodeJS.WriteStream;
+  groupByKind?: boolean;
 }
 
 const GROUP_TITLES: Record<string, string> = {
@@ -179,6 +180,132 @@ function issueDetail(issue: CheckIssue): string {
   }
 }
 
+type IssueCategory =
+  | "unsupported"
+  | "warnings"
+  | "unknown"
+  | "dependencies"
+  | "ignored";
+
+type IssueKind = "html" | "css" | "js";
+
+type IssueGroups = Record<IssueKind, Record<IssueCategory, CheckIssue[]>>;
+
+const ISSUE_CATEGORIES: IssueCategory[] = [
+  "unsupported",
+  "warnings",
+  "unknown",
+  "dependencies",
+  "ignored"
+];
+
+const ISSUE_CATEGORY_TITLES: Record<IssueCategory, string> = {
+  unsupported: "Unsupported",
+  warnings: "Warnings",
+  unknown: "Unknown",
+  dependencies: "Dependencies",
+  ignored: "Ignored"
+};
+
+const ISSUE_KINDS: IssueKind[] = ["html", "css", "js"];
+
+function emptyCategoryGroups(): Record<IssueCategory, CheckIssue[]> {
+  return {
+    unsupported: [],
+    warnings: [],
+    unknown: [],
+    dependencies: [],
+    ignored: []
+  };
+}
+
+function issueLine(
+  issue: CheckIssue,
+  category: IssueCategory,
+  colors: Colors,
+  indent: string
+): string {
+  let marker: string;
+  switch (category) {
+    case "unsupported":
+      marker = colors.red("x");
+      break;
+    case "warnings":
+      marker = colors.yellow("!");
+      break;
+    case "unknown":
+      marker = colors.yellow("?");
+      break;
+    case "dependencies":
+      marker = issueMarker(issue, colors);
+      break;
+    default:
+      marker = colors.dim("-");
+      break;
+  }
+
+  return `${indent}${marker} ${describeKey(issue.key)} ${colors.dim(
+    `(${issueDetail(issue)})`
+  )}${issueSources(issue, colors)}`;
+}
+
+function categoryTitle(
+  category: IssueCategory,
+  count: number,
+  colors: Colors
+): string {
+  const title = `${ISSUE_CATEGORY_TITLES[category]} (${count})`;
+  switch (category) {
+    case "unsupported":
+      return colors.red(title);
+    case "ignored":
+      return colors.dim(title);
+    default:
+      return colors.yellow(title);
+  }
+}
+
+function sectionLines(
+  category: IssueCategory,
+  issues: CheckIssue[],
+  colors: Colors,
+  indent: string
+): string[] {
+  return [
+    `${indent}${categoryTitle(category, issues.length, colors)}`,
+    ...issues.map((issue) => issueLine(issue, category, colors, `${indent}  `))
+  ];
+}
+
+function groupIssues(target: CheckResult["targets"][number]): IssueGroups {
+  const groups: IssueGroups = {
+    html: emptyCategoryGroups(),
+    css: emptyCategoryGroups(),
+    js: emptyCategoryGroups()
+  };
+
+  for (const category of ISSUE_CATEGORIES) {
+    for (const issue of target[category]) {
+      groups[kindForKey(issue.key)][category].push(issue);
+    }
+  }
+
+  return groups;
+}
+
+function allSupportedMessage(
+  target: CheckResult["targets"][number],
+  colors: Colors
+): string {
+  return colors.green(
+    target.dependencies.length > 0
+      ? "  All first-party features supported."
+      : target.ignored.length > 0
+        ? "  All non-ignored features supported."
+        : "  All features supported."
+  );
+}
+
 export function printCheckReport(
   result: CheckResult,
   options: CheckReportOptions = {}
@@ -201,58 +328,31 @@ export function printCheckReport(
         )
     );
 
-    if (target.unsupported.length > 0) {
-      lines.push(colors.red(`  Unsupported (${target.unsupported.length})`));
-      for (const issue of target.unsupported) {
-        lines.push(
-          `    ${colors.red("x")} ${describeKey(issue.key)} ${colors.dim(
-            `(${issueDetail(issue)})`
-          )}${issueSources(issue, colors)}`
+    if (options.groupByKind) {
+      const groups = groupIssues(target);
+      for (const kind of ISSUE_KINDS) {
+        const kindGroups = groups[kind];
+        const hasIssues = ISSUE_CATEGORIES.some(
+          (category) => kindGroups[category].length > 0
         );
-      }
-    }
+        if (!hasIssues) {
+          continue;
+        }
 
-    if (target.warnings.length > 0) {
-      lines.push(colors.yellow(`  Warnings (${target.warnings.length})`));
-      for (const issue of target.warnings) {
-        lines.push(
-          `    ${colors.yellow("!")} ${describeKey(issue.key)} ${colors.dim(
-            `(${issueDetail(issue)})`
-          )}${issueSources(issue, colors)}`
-        );
+        lines.push(colors.bold(`  ${GROUP_TITLES[kind]}`));
+        for (const category of ISSUE_CATEGORIES) {
+          const issues = kindGroups[category];
+          if (issues.length > 0) {
+            lines.push(...sectionLines(category, issues, colors, "    "));
+          }
+        }
       }
-    }
-
-    if (target.unknown.length > 0) {
-      lines.push(colors.yellow(`  Unknown (${target.unknown.length})`));
-      for (const issue of target.unknown) {
-        lines.push(
-          `    ${colors.yellow("?")} ${describeKey(issue.key)} ${colors.dim(
-            `(${issueDetail(issue)})`
-          )}${issueSources(issue, colors)}`
-        );
-      }
-    }
-
-    if (target.dependencies.length > 0) {
-      lines.push(colors.yellow(`  Dependencies (${target.dependencies.length})`));
-      for (const issue of target.dependencies) {
-        lines.push(
-          `    ${issueMarker(issue, colors)} ${describeKey(issue.key)} ${colors.dim(
-            `(${issueDetail(issue)})`
-          )}${issueSources(issue, colors)}`
-        );
-      }
-    }
-
-    if (target.ignored.length > 0) {
-      lines.push(colors.dim(`  Ignored (${target.ignored.length})`));
-      for (const issue of target.ignored) {
-        lines.push(
-          `    ${colors.dim("-")} ${describeKey(issue.key)} ${colors.dim(
-            `(${issueDetail(issue)})`
-          )}${issueSources(issue, colors)}`
-        );
+    } else {
+      for (const category of ISSUE_CATEGORIES) {
+        const issues = target[category];
+        if (issues.length > 0) {
+          lines.push(...sectionLines(category, issues, colors, "  "));
+        }
       }
     }
 
@@ -261,15 +361,7 @@ export function printCheckReport(
       target.warnings.length === 0 &&
       target.unknown.length === 0
     ) {
-      lines.push(
-        colors.green(
-          target.dependencies.length > 0
-            ? "  All first-party features supported."
-            : target.ignored.length > 0
-              ? "  All non-ignored features supported."
-              : "  All features supported."
-        )
-      );
+      lines.push(allSupportedMessage(target, colors));
     }
 
     lines.push("");

@@ -101,4 +101,64 @@ describe("check report", () => {
     expect(stream.output).toContain("node_modules/pkg/index.css");
     expect(stream.output).toContain("All first-party features supported.");
   });
+
+  it("groups issue categories under HTML, CSS, and JS", () => {
+    const result: CheckResult = {
+      targets: [
+        {
+          browser: "safari",
+          version: "15.6",
+          browserName: "Safari",
+          supported: 0,
+          unsupported: [
+            {
+              key: "html.elements.dialog",
+              state: "unsupported",
+              added: "37"
+            }
+          ],
+          warnings: [
+            {
+              key: "css.properties.backdrop-filter",
+              state: "prefixed",
+              prefix: "-webkit-"
+            }
+          ],
+          unknown: [],
+          ignored: [
+            {
+              key: "html.elements.template",
+              state: "unsupported"
+            }
+          ],
+          dependencies: [
+            {
+              key: "javascript.builtins.Array.toSorted",
+              state: "unsupported",
+              added: "16",
+              sourcePaths: ["node_modules/pkg/index.js"]
+            }
+          ]
+        }
+      ],
+      unknownKeys: []
+    };
+
+    const stream = new FakeStream();
+    printCheckReport(result, {
+      stream: stream as unknown as NodeJS.WriteStream,
+      groupByKind: true
+    });
+
+    const output = stream.output;
+    expect(output).toContain("Unsupported (1)");
+    expect(output).toContain("Warnings (1)");
+    expect(output).toContain("Dependencies (1)");
+    expect(output).toContain("Ignored (1)");
+    expect(output.indexOf("HTML")).toBeLessThan(output.indexOf("Unsupported"));
+    expect(output.indexOf("Unsupported")).toBeLessThan(output.indexOf("CSS"));
+    expect(output.indexOf("CSS")).toBeLessThan(output.indexOf("Warnings"));
+    expect(output.indexOf("Warnings")).toBeLessThan(output.indexOf("JS"));
+    expect(output.indexOf("JS")).toBeLessThan(output.indexOf("Dependencies"));
+  });
 });

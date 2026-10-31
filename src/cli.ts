@@ -39,6 +39,7 @@ interface CheckCliOptions {
   listBrowsers?: boolean;
   ignoreSource?: string[] | string;
   dependencySource?: string[] | string;
+  groupByKind?: boolean;
 }
 
 function stringArray(value: string[] | string | undefined): string[] {
@@ -164,7 +165,7 @@ async function runCheck(
   if (options.json) {
     process.stdout.write(formatCheckJson(result));
   } else if (!options.quiet) {
-    printCheckReport(result);
+    printCheckReport(result, { groupByKind: options.groupByKind });
   }
 
   if (options.fail && result.targets.some((target) => target.unsupported.length > 0)) {
@@ -225,6 +226,7 @@ export async function main(argv = process.argv): Promise<void> {
       "classify issues whose usages all match this source glob as dependencies (repeatable; default: **/node_modules/**)",
       { type: [String] }
     )
+    .option("--group-by-kind", "group issues under HTML, CSS, and JS")
     .option("--json", "print machine-readable JSON")
     .option("--fail", "exit with code 2 when unsupported features are found")
     .option("-q, --quiet", "suppress the human-readable report")
