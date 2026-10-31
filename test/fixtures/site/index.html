@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <link rel="preload" href="/font.woff2" as="font">
+    <style>
+      .card {
+        display: grid;
+        backdrop-filter: blur(4px);
+      }
+
+      .card:has(img) {
+        color: color-mix(in srgb, red, blue);
+      }
+
+      @container card (min-width: 400px) {
+        .card {
+          text-wrap: balance;
+        }
+      }
+
+      @media (width > 600px) {
+        .card {
+          position: sticky;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <dialog popover>Hello</dialog>
+    <input type="date">
+    <div style="display: flex; gap: 1rem" onclick="navigator.share?.({ title: 'x' })">
+      Click
+    </div>
+    <template>
+      <details>
+        <summary>More</summary>
+      </details>
+    </template>
+    <script type="module">
+      const value = window.foo ?? 1;
+      const el = document.querySelector('dialog');
+      el?.showModal?.();
+      new IntersectionObserver(() => {});
+      const n = 1_000n;
+      const r = /(?<=a)b/dv;
+      await fetch('/api');
+
+      class Counter {
+        #count = 0;
+        static {
+          this.created = true;
+        }
+
+        get value() {
+          return this.#count;
+        }
+      }
+    </script>
+  </body>
+</html>

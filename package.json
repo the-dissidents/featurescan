@@ -1,0 +1,60 @@
+{
+  "name": "featurescan",
+  "version": "0.1.0",
+  "description": "Scan built HTML/CSS/JS artifacts and catalog the web platform features they use.",
+  "type": "module",
+  "bin": {
+    "featurescan": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": "^22.18.0 || >=24.11.0"
+  },
+  "scripts": {
+    "build": "rolldown -c && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "compatibility",
+    "browser-compat-data",
+    "html",
+    "css",
+    "javascript",
+    "static-site",
+    "catalog"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@12.6.0",
+  "dependencies": {
+    "@babel/parser": "^8.0.10",
+    "@babel/traverse": "^8.0.10",
+    "@babel/types": "^8.0.10",
+    "@mdn/browser-compat-data": "^8.1.7",
+    "cac": "^7.1.0",
+    "css-tree": "^3.2.1",
+    "parse5": "^8.0.1",
+    "picocolors": "^1.1.1",
+    "tinyglobby": "^0.2.17"
+  },
+  "devDependencies": {
+    "@types/babel__traverse": "^7.28.0",
+    "@types/css-tree": "^3.2.0",
+    "@types/node": "^26.6.6",
+    "rolldown": "^1.2.16",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

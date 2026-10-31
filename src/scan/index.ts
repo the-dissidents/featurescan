@@ -1,0 +1,83 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { CompatDB } from "../compat/bcd";
+import type { Diagnostic, ScanOptions, ScanResult } from "../types";
+import { Catalog } from "./catalog";
+import type { ScanContext } from "./context";
+import { scanCss } from "./css";
+import { discover } from "./discover";
+import { scanHtml } from "./html";
+import { scanJs } from "./js";
+
+export async function scan(
+  rootInput: string,
+  options: ScanOptions = {}
+): Promise<ScanResult> {
+  const { baseRoot, files, relativeFiles } = await discover(
+    rootInput,
+    options
+  );
+  const maxUsages =
+    options.maxUsages === undefined ? 50 : options.maxUsages;
+  const catalog = new Catalog(maxUsages === 0 ? Infinity : maxUsages);
+  const diagnostics: Diagnostic[] = [];
+  const context: ScanContext = {
+    compat: new CompatDB(),
+    catalog,
+    diagnostics
+  };
+
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    const relativeFile = relativeFiles[index];
+    if (!file || !relativeFile) {
+      continue;
+    }
+
+    let source: string;
+    try {
+      source = await readFile(file, "utf8");
+    } catch (error) {
+      diagnostics.push({
+        severity: "warning",
+        file: relativeFile,
+        message:
+          error instanceof Error ? error.message : "failed to read file"
+      });
+      continue;
+    }
+
+    const extension = path.extname(file).toLowerCase();
+    switch (extension) {
+      case ".html":
+      case ".htm":
+      case ".svg":
+        scanHtml({ file: relativeFile, source, context });
+        break;
+      case ".css":
+        scanCss({ file: relativeFile, source, context });
+        break;
+      case ".js":
+      case ".mjs":
+      case ".cjs": {
+        const sourceType =
+          extension === ".mjs"
+            ? "module"
+            : extension === ".cjs"
+              ? "script"
+              : "unambiguous";
+        scanJs({ file: relativeFile, source, context, sourceType });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return {
+    root: baseRoot,
+    files: relativeFiles,
+    features: catalog.results(),
+    diagnostics
+  };
+}

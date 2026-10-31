@@ -1,0 +1,15 @@
+@layer components {
+  .panel {
+    container-type: inline-size;
+  }
+}
+
+@scope (.card) to (.content) {
+  :scope {
+    color: oklch(70% 0.1 200);
+  }
+}
+
+.panel:is(.wide) {
+  overflow: clip;
+}

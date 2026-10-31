@@ -1,0 +1,215 @@
+import pc from "picocolors";
+import type { CheckIssue, CheckResult } from "../check/index";
+import type { Detection, ScanResult } from "../types";
+import { VERSION } from "../version";
+import { describeKey, kindForKey } from "./describe";
+
+export interface ScanReportOptions {
+  verbose?: boolean;
+  quiet?: boolean;
+  out?: string;
+  durationMs?: number;
+}
+
+const GROUP_TITLES: Record<string, string> = {
+  html: "HTML",
+  css: "CSS",
+  js: "JS"
+};
+
+function usageLines(feature: Detection, limit: number): string[] {
+  const usages = feature.usages.slice(0, limit);
+  const lines = usages.map((usage) => {
+    const snippet = usage.snippet ? `  ${pc.dim(usage.snippet)}` : "";
+    return `    ${usage.file}:${usage.line}:${usage.column}${snippet}`;
+  });
+  const remaining = feature.usages.length - usages.length;
+  if (remaining > 0) {
+    lines.push(`    ${pc.dim(`... and ${remaining} more`)}`);
+  }
+  return lines;
+}
+
+export function printScanReport(
+  result: ScanResult,
+  keys: string[],
+  options: ScanReportOptions = {}
+): void {
+  if (options.quiet) {
+    return;
+  }
+
+  const lines: string[] = [];
+  lines.push(pc.bold(`featurescan ${VERSION}`));
+  const duration =
+    options.durationMs === undefined ? "" : ` in ${options.durationMs} ms`;
+  lines.push(
+    `Scanned ${result.files.length} file${
+      result.files.length === 1 ? "" : "s"
+    }${duration}`
+  );
+
+  if (keys.length === 0) {
+    lines.push("Found no features.");
+    if (options.out) {
+      lines.push(`Manifest written to ${options.out}`);
+    }
+    process.stderr.write(`${lines.join("\n")}\n`);
+    return;
+  }
+
+  const groups: Record<string, Detection[]> = { html: [], css: [], js: [] };
+  for (const feature of result.features) {
+    groups[kindForKey(feature.key)]?.push(feature);
+  }
+
+  lines.push(
+    `Found ${keys.length} feature${keys.length === 1 ? "" : "s"}: ` +
+      (["html", "css", "js"] as const)
+        .map((group) => `${groups[group]?.length ?? 0} ${GROUP_TITLES[group]}`)
+        .join(", ")
+  );
+
+  for (const group of ["html", "css", "js"] as const) {
+    const features = groups[group] ?? [];
+    if (features.length === 0) {
+      continue;
+    }
+    lines.push("");
+    lines.push(pc.bold(`${GROUP_TITLES[group]} (${features.length})`));
+    for (const feature of features) {
+      lines.push(`  ${pc.cyan(describeKey(feature.key))}`);
+      if (options.verbose) {
+        lines.push(...usageLines(feature, 3));
+      }
+    }
+  }
+
+  if (result.diagnostics.length > 0) {
+    lines.push("");
+    lines.push(
+      pc.yellow(
+        `Warnings (${result.diagnostics.length}):`
+      )
+    );
+    for (const diagnostic of result.diagnostics.slice(0, 20)) {
+      const location = diagnostic.file ? `${diagnostic.file}: ` : "";
+      lines.push(`  ${location}${diagnostic.message}`);
+    }
+    if (result.diagnostics.length > 20) {
+      lines.push(`  ... and ${result.diagnostics.length - 20} more`);
+    }
+  }
+
+  if (options.out) {
+    lines.push("");
+    lines.push(`Manifest written to ${options.out}`);
+  }
+
+  process.stderr.write(`${lines.join("\n")}\n`);
+}
+
+function issueDetail(issue: CheckIssue): string {
+  switch (issue.state) {
+    case "partial":
+      return "partial implementation";
+    case "flagged": {
+      const flags = issue.flags?.join(", ");
+      return flags ? `requires a flag: ${flags}` : "requires a flag";
+    }
+    case "prefixed":
+      return issue.prefix ? `requires prefix ${issue.prefix}` : "requires a prefix";
+    case "alternative":
+      return issue.alternativeName
+        ? `alternative name: ${issue.alternativeName}`
+        : "only available under another name";
+    case "unsupported": {
+      if (issue.removed === true) {
+        return "removed";
+      }
+      if (typeof issue.removed === "string") {
+        return `removed in ${issue.removed}`;
+      }
+      if (typeof issue.added === "string") {
+        return `requires ${issue.added}`;
+      }
+      return "not supported";
+    }
+    case "unknown":
+      return issue.reason ?? "unknown compatibility";
+    default:
+      return issue.state;
+  }
+}
+
+export function printCheckReport(result: CheckResult): void {
+  const lines: string[] = [];
+
+  for (const target of result.targets) {
+    lines.push(
+      pc.bold(`${target.browserName} ${target.version}`) +
+        pc.dim(
+          `  ${target.supported} supported, ${target.unsupported.length} unsupported, ${target.warnings.length} warnings`
+        )
+    );
+
+    if (target.unsupported.length > 0) {
+      lines.push(pc.red(`  Unsupported (${target.unsupported.length})`));
+      for (const issue of target.unsupported) {
+        lines.push(
+          `    ${pc.red("x")} ${describeKey(issue.key)} ${pc.dim(
+            `(${issueDetail(issue)})`
+          )}`
+        );
+      }
+    }
+
+    if (target.warnings.length > 0) {
+      lines.push(pc.yellow(`  Warnings (${target.warnings.length})`));
+      for (const issue of target.warnings) {
+        lines.push(
+          `    ${pc.yellow("!")} ${describeKey(issue.key)} ${pc.dim(
+            `(${issueDetail(issue)})`
+          )}`
+        );
+      }
+    }
+
+    if (target.unknown.length > 0) {
+      lines.push(pc.yellow(`  Unknown (${target.unknown.length})`));
+      for (const issue of target.unknown) {
+        lines.push(
+          `    ${pc.yellow("?")} ${describeKey(issue.key)} ${pc.dim(
+            `(${issueDetail(issue)})`
+          )}`
+        );
+      }
+    }
+
+    if (
+      target.unsupported.length === 0 &&
+      target.warnings.length === 0 &&
+      target.unknown.length === 0
+    ) {
+      lines.push(pc.green("  All features supported."));
+    }
+
+    lines.push("");
+  }
+
+  if (result.unknownKeys.length > 0) {
+    lines.push(
+      pc.yellow(`Unknown feature keys (${result.unknownKeys.length}):`)
+    );
+    for (const key of result.unknownKeys) {
+      lines.push(`  ${key}`);
+    }
+    lines.push("");
+  }
+
+  process.stdout.write(`${lines.join("\n").trimEnd()}\n`);
+}
+
+export function formatCheckJson(result: CheckResult): string {
+  return `${JSON.stringify(result, null, 2)}\n`;
+}
