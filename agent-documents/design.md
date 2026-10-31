@@ -5,8 +5,8 @@ Status: v0.1 implementation complete (scan + report + check).
 ## Goal
 
 Scan a built static site or HTML/JS desktop app and emit a manifest of web
-platform features. The manifest is deliberately a plain list of MDN
-browser-compat-data (BCD) keys:
+platform features. The manifest is deliberately a plain list of keys, mostly
+MDN browser-compat-data (BCD) keys plus synthetic vendor-prefix markers:
 
 ```json
 ["api.IntersectionObserver", "css.properties.backdrop-filter", "html.elements.dialog"]
@@ -53,6 +53,9 @@ HTML/CSS rules are largely derived from BCD key existence:
 - Attribute values -> nested paths (`html.elements.link.rel.preload`) or
   flattened paths (`html.elements.input.type_date`).
 - CSS property -> `css.properties.<property>`.
+- Vendor-prefixed properties (`-webkit-user-select`) also add the base BCD key
+  and a synthetic marker such as `css.properties.-webkit-user-select`. The
+  marker records that the prefix fallback was present.
 - CSS value -> `css.properties.<property>.<value>` when BCD has that key.
 - CSS function -> a leaf under `css.types.*` (`css.types.color.color-mix`).
 - CSS at-rule/selector/media feature -> the matching BCD subtree. `min-` and
@@ -98,6 +101,11 @@ Results are split into supported, unsupported, warnings (partial/flagged/
 prefixed/alternative), and unknown. Unknown feature keys are reported
 separately. `check` defaults to the latest stable version of mainstream
 browsers; `--browser name@version` overrides this.
+
+When a feature is supported only through a prefix and the manifest contains a
+matching synthetic prefix marker for any qualifying prefix, the prefixed
+warning is suppressed and the feature is counted as covered. Synthetic markers
+are excluded from feature evaluation and unknown-key reporting.
 
 ## Detection confidence
 

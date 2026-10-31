@@ -61,6 +61,21 @@ describe("evaluateSupport", () => {
     expect(evaluateSupport(statement, "chrome", "70").state).toBe("supported");
   });
 
+  it("collects all qualifying prefixes", () => {
+    const evaluation = evaluateSupport(
+      compat({
+        chrome: [
+          { version_added: "1", prefix: "-webkit-" },
+          { version_added: "2", prefix: "-moz-" }
+        ]
+      }),
+      "chrome",
+      "120"
+    );
+    expect(evaluation.state).toBe("prefixed");
+    expect(evaluation.prefixes).toEqual(["-moz-", "-webkit-"]);
+  });
+
   it("reports warnings for partial, flagged, prefixed and alternative support", () => {
     expect(
       evaluateSupport(

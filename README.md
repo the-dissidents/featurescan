@@ -1,9 +1,10 @@
 # featurescan
 
 Scan a **built** static site or HTML/JS desktop app and emit a list of the web
-platform features it uses. The list is a set of
-[MDN browser-compat-data](https://github.com/mdn/browser-compat-data) keys, so
-it can later be used for runtime compatibility checks.
+platform features it uses. The list is made of
+[MDN browser-compat-data](https://github.com/mdn/browser-compat-data) keys, plus
+synthetic prefix markers for vendor-prefixed CSS fallbacks, so it can later be
+used for runtime compatibility checks.
 
 ```json
 [
@@ -16,6 +17,16 @@ it can later be used for runtime compatibility checks.
 
 The manifest intentionally contains only keys. Compatibility details are
 resolved by the CLI when it prints a report or runs `check`.
+
+Vendor-prefixed CSS properties are recorded alongside their unprefixed key using
+a synthetic marker, for example:
+
+```json
+["css.properties.user-select", "css.properties.-webkit-user-select"]
+```
+
+This lets `check` recognize a deliberate prefix fallback and suppress the
+corresponding prefix warning.
 
 ## Requirements
 
@@ -65,6 +76,9 @@ featurescan check features.json --browser safari@15.6 --fail
 `--browser` accepts `name@version`, `name` (latest stable), or `name@latest`.
 Aliases such as `ios` (for `safari_ios`) are supported. Use
 `--list-browsers` to see the available identifiers and latest versions.
+
+Prefixed-CSS warnings are suppressed when the manifest contains a matching
+`-webkit-`, `-moz-`, `-ms-`, `-o-`, or `-khtml-` marker for that property.
 
 Exit codes:
 

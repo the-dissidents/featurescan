@@ -1,3 +1,4 @@
+import { compareStrings } from "../util";
 import type { CompatStatement, SupportStatement } from "./types";
 
 export type SupportState =
@@ -16,6 +17,7 @@ export interface SupportEvaluation {
   partial?: boolean;
   flags?: string[];
   prefix?: string;
+  prefixes?: string[];
   alternativeName?: string;
   reason?: string;
 }
@@ -183,10 +185,14 @@ export function evaluateSupport(
   }
 
   let best: SupportEvaluation | undefined;
+  const qualifyingPrefixes = new Set<string>();
   for (const statement of statements) {
     const evaluation = evaluateStatement(statement, targetVersion);
     if (!evaluation) {
       continue;
+    }
+    if (evaluation.prefix) {
+      qualifyingPrefixes.add(evaluation.prefix);
     }
     if (evaluation.state === "supported") {
       return evaluation;
@@ -197,7 +203,13 @@ export function evaluateSupport(
   }
 
   if (best) {
-    return best;
+    return {
+      ...best,
+      prefixes:
+        qualifyingPrefixes.size > 0
+          ? [...qualifyingPrefixes].sort(compareStrings)
+          : undefined
+    };
   }
 
   const first = statements[0];

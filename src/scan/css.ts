@@ -1,7 +1,9 @@
 import { parse, walk, type CssNode } from "css-tree";
 import type { ScanContext } from "./context";
-import { addFeature, warn } from "./context";
+import { addFeature, addSyntheticFeature, warn } from "./context";
 import { makeUsage } from "./source";
+
+const VENDOR_PREFIX = /^-(webkit|moz|ms|o|khtml)-/;
 
 export interface CssBasePosition {
   offset: number;
@@ -60,30 +62,74 @@ export function scanCss(input: CssScanInput): void {
     return;
   }
 
+  const addWith = (
+    key: string | undefined,
+    node: CssNode,
+    confidence: "high" | "medium",
+    synthetic: boolean
+  ) => {
+    if (!key || !node.loc) {
+      return;
+    }
+    const start = node.loc.start;
+    const local = localPosition(start.line, start.column, base);
+    const usage = makeUsage(
+      file,
+      start.line,
+      start.column,
+      source,
+      local.line,
+      local.column
+    );
+    if (synthetic) {
+      addSyntheticFeature(context, key, "css", usage, confidence);
+    } else {
+      addFeature(context, key, "css", usage, confidence);
+    }
+  };
+
   const add = (
     key: string | undefined,
     node: CssNode,
     confidence: "high" | "medium" = "high"
   ) => {
-    if (!node.loc) {
+    addWith(key, node, confidence, false);
+  };
+
+  const addSynthetic = (key: string, node: CssNode) => {
+    addWith(key, node, "high", true);
+  };
+
+  const addValues = (
+    property: string,
+    value: CssNode,
+    declaration: CssNode
+  ) => {
+    if (value.type !== "Value") {
       return;
     }
-    const start = node.loc.start;
-    const local = localPosition(start.line, start.column, base);
-    addFeature(
-      context,
-      key,
-      "css",
-      makeUsage(
-        file,
-        start.line,
-        start.column,
-        source,
-        local.line,
-        local.column
-      ),
-      confidence
-    );
+
+    let identifierCount = 0;
+    for (const child of value.children.toArray()) {
+      if (child.type === "Identifier") {
+        identifierCount += 1;
+        add(context.compat.cssValue(property, child.name), child);
+      }
+    }
+
+    if (identifierCount >= 2) {
+      for (const suffix of [
+        "multi-keyword_values",
+        "multiple_keywords",
+        "multi_keyword_values",
+        "multiple_keyword_values"
+      ]) {
+        const key = `css.properties.${property}.${suffix}`;
+        if (context.compat.has(key)) {
+          add(key, declaration);
+        }
+      }
+    }
   };
 
   walk(ast, {
@@ -100,31 +146,21 @@ export function scanCss(input: CssScanInput): void {
             break;
           }
 
-          add(context.compat.cssProperty(property), node);
-
-          if (node.value.type === "Value") {
-            let identifierCount = 0;
-            for (const child of node.value.children.toArray()) {
-              if (child.type === "Identifier") {
-                identifierCount += 1;
-                add(context.compat.cssValue(property, child.name), child);
-              }
-            }
-
-            if (identifierCount >= 2) {
-              for (const suffix of [
-                "multi-keyword_values",
-                "multiple_keywords",
-                "multi_keyword_values",
-                "multiple_keyword_values"
-              ]) {
-                const key = `css.properties.${property}.${suffix}`;
-                if (context.compat.has(key)) {
-                  add(key, node);
-                }
-              }
+          const normalizedProperty = property.toLowerCase();
+          const prefixMatch = VENDOR_PREFIX.exec(normalizedProperty);
+          if (prefixMatch) {
+            const baseProperty = normalizedProperty.slice(prefixMatch[0].length);
+            const baseKey = context.compat.cssProperty(baseProperty);
+            if (baseKey) {
+              add(baseKey, node);
+              addSynthetic(`css.properties.${normalizedProperty}`, node);
+              addValues(baseProperty, node.value, node);
+              break;
             }
           }
+
+          add(context.compat.cssProperty(normalizedProperty), node);
+          addValues(normalizedProperty, node.value, node);
           break;
         }
         case "Function": {

@@ -6,6 +6,39 @@ import { CompatDB } from "../src/compat/bcd";
 const compat = new CompatDB();
 
 describe("checkManifest", () => {
+  it("suppresses prefix warnings when a matching prefixed fallback is present", () => {
+    const target = [{ browser: "safari", version: "15.6" }];
+
+    const withFallback = checkManifest(
+      ["css.properties.user-select", "css.properties.-webkit-user-select"],
+      target,
+      compat
+    );
+    expect(withFallback.targets[0]?.warnings).toEqual([]);
+    expect(withFallback.targets[0]?.unsupported).toEqual([]);
+    expect(withFallback.targets[0]?.supported).toBe(1);
+    expect(withFallback.unknownKeys).toEqual([]);
+
+    const withoutFallback = checkManifest(
+      ["css.properties.user-select"],
+      target,
+      compat
+    );
+    expect(withoutFallback.targets[0]?.warnings.map((issue) => issue.key)).toContain(
+      "css.properties.user-select"
+    );
+  });
+
+  it("suppresses any qualifying prefix fallback", () => {
+    const result = checkManifest(
+      ["css.properties.user-select", "css.properties.-moz-user-select"],
+      [{ browser: "firefox", version: "60" }],
+      compat
+    );
+    expect(result.targets[0]?.warnings).toEqual([]);
+    expect(result.targets[0]?.supported).toBe(1);
+  });
+
   it("finds unsupported features for a target browser", () => {
     const result = checkManifest(
       [

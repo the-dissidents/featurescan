@@ -44,6 +44,19 @@ describe("CSS scanner", () => {
     expect(display?.usages.some((usage) => usage.line === 3)).toBe(true);
   });
 
+  it("records vendor-prefixed properties alongside their base key", () => {
+    const { context, catalog } = createTestContext();
+    scanCss({
+      file: "prefix.css",
+      source: ".a { -webkit-user-select: none; user-select: none; }",
+      context
+    });
+    const keys = catalog.keys();
+
+    expect(keys).toContain("css.properties.user-select");
+    expect(keys).toContain("css.properties.-webkit-user-select");
+  });
+
   it("normalizes min/max media features", () => {
     const { context, catalog } = createTestContext();
     scanCss({

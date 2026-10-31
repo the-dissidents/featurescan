@@ -19,6 +19,7 @@ export interface CheckIssue {
   partial?: boolean;
   flags?: string[];
   prefix?: string;
+  prefixes?: string[];
   alternativeName?: string;
   reason?: string;
 }
@@ -43,6 +44,32 @@ const WARNING_STATES = new Set<SupportState>([
   "alternative"
 ]);
 
+const CSS_PROPERTY_PREFIX = /^-(webkit|moz|ms|o|khtml)-(.+)$/;
+
+function cssPrefixMarker(
+  key: string,
+  compat: CompatDB
+): { baseKey: string; prefix: string } | undefined {
+  const namespace = "css.properties.";
+  if (!key.startsWith(namespace)) {
+    return undefined;
+  }
+
+  const property = key.slice(namespace.length);
+  const match = CSS_PROPERTY_PREFIX.exec(property);
+  if (!match) {
+    return undefined;
+  }
+
+  const prefix = `-${match[1]}-`;
+  const baseKey = `${namespace}${match[2]}`;
+  if (!compat.has(baseKey)) {
+    return undefined;
+  }
+
+  return { baseKey, prefix };
+}
+
 export function checkManifest(
   keys: string[],
   targets: BrowserTarget[],
@@ -51,11 +78,19 @@ export function checkManifest(
   const uniqueKeys = [...new Set(keys)].sort(compareStrings);
   const unknownKeys: string[] = [];
   const knownKeys: string[] = [];
+  const prefixMarkers = new Map<string, Set<string>>();
 
   for (const key of uniqueKeys) {
+    const marker = cssPrefixMarker(key, compat);
+    if (marker) {
+      const prefixes = prefixMarkers.get(marker.baseKey) ?? new Set<string>();
+      prefixes.add(marker.prefix);
+      prefixMarkers.set(marker.baseKey, prefixes);
+    }
+
     if (compat.has(key)) {
       knownKeys.push(key);
-    } else {
+    } else if (!marker) {
       unknownKeys.push(key);
     }
   }
@@ -74,6 +109,13 @@ export function checkManifest(
       );
       const issue: CheckIssue = { key, ...evaluation };
       if (evaluation.state === "supported") {
+        supported += 1;
+      } else if (
+        evaluation.state === "prefixed" &&
+        (evaluation.prefixes ?? (evaluation.prefix ? [evaluation.prefix] : [])).some(
+          (prefix) => prefixMarkers.get(key)?.has(prefix)
+        )
+      ) {
         supported += 1;
       } else if (evaluation.state === "unsupported") {
         unsupported.push(issue);

@@ -21,6 +21,16 @@ export function addFeature(
   context.catalog.add(key, kind, usage, confidence);
 }
 
+export function addSyntheticFeature(
+  context: ScanContext,
+  key: string,
+  kind: FeatureKind,
+  usage: Usage,
+  confidence: Confidence = "high"
+): void {
+  context.catalog.add(key, kind, usage, confidence);
+}
+
 export function warn(
   context: ScanContext,
   file: string,
