@@ -107,6 +107,10 @@ matching synthetic prefix marker for any qualifying prefix, the prefixed
 warning is suppressed and the feature is counted as covered. Synthetic markers
 are excluded from feature evaluation and unknown-key reporting.
 
+Unsupported issues with no support at all are listed first; the rest are sorted
+by their `version_added` value descending (newest support requirement first),
+with key order as the tiebreaker.
+
 ## Detection confidence
 
 The manifest has no confidence field. Confidence exists only in the in-memory

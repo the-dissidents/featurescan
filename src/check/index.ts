@@ -1,5 +1,6 @@
 import type { CompatDB } from "../compat/bcd";
 import {
+  compareVersions,
   evaluateSupport,
   type SupportEvaluation,
   type SupportState
@@ -45,6 +46,31 @@ const WARNING_STATES = new Set<SupportState>([
 ]);
 
 const CSS_PROPERTY_PREFIX = /^-(webkit|moz|ms|o|khtml)-(.+)$/;
+
+function addedVersion(issue: CheckIssue): string | undefined {
+  if (typeof issue.added === "string") {
+    return issue.added;
+  }
+  return issue.added === true ? "0" : undefined;
+}
+
+function compareUnsupported(a: CheckIssue, b: CheckIssue): number {
+  const aAdded = addedVersion(a);
+  const bAdded = addedVersion(b);
+
+  if (aAdded && bAdded) {
+    const comparison = compareVersions(aAdded, bAdded);
+    if (comparison !== undefined && comparison !== 0) {
+      return -comparison;
+    }
+  } else if (aAdded) {
+    return 1;
+  } else if (bAdded) {
+    return -1;
+  }
+
+  return compareStrings(a.key, b.key);
+}
 
 function cssPrefixMarker(
   key: string,
@@ -133,7 +159,7 @@ export function checkManifest(
       ...target,
       browserName: compat.browserName(target.browser),
       supported,
-      unsupported: unsupported.sort(byKey),
+      unsupported: unsupported.sort(compareUnsupported),
       warnings: warnings.sort(byKey),
       unknown: unknown.sort(byKey)
     };

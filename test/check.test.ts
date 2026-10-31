@@ -6,6 +6,44 @@ import { CompatDB } from "../src/compat/bcd";
 const compat = new CompatDB();
 
 describe("checkManifest", () => {
+  it("puts features with no support at all first", () => {
+    const result = checkManifest(
+      [
+        "css.at-rules.container",
+        "css.at-rules.scope",
+        "css.at-rules.document"
+      ],
+      [{ browser: "safari", version: "15.6" }],
+      compat
+    );
+
+    expect(result.targets[0]?.unsupported.map((issue) => issue.key)).toEqual([
+      "css.at-rules.document",
+      "css.at-rules.scope",
+      "css.at-rules.container"
+    ]);
+  });
+
+  it("sorts unsupported features by support version, newest first", () => {
+    const result = checkManifest(
+      [
+        "css.properties.container-type",
+        "css.at-rules.scope",
+        "css.properties.text-wrap.balance",
+        "css.at-rules.media.range_syntax"
+      ],
+      [{ browser: "safari", version: "15.6" }],
+      compat
+    );
+
+    expect(result.targets[0]?.unsupported.map((issue) => issue.key)).toEqual([
+      "css.at-rules.scope",
+      "css.properties.text-wrap.balance",
+      "css.at-rules.media.range_syntax",
+      "css.properties.container-type"
+    ]);
+  });
+
   it("suppresses prefix warnings when a matching prefixed fallback is present", () => {
     const target = [{ browser: "safari", version: "15.6" }];
 

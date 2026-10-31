@@ -79,6 +79,8 @@ Aliases such as `ios` (for `safari_ios`) are supported. Use
 
 Prefixed-CSS warnings are suppressed when the manifest contains a matching
 `-webkit-`, `-moz-`, `-ms-`, `-o-`, or `-khtml-` marker for that property.
+Unsupported features are sorted with never-supported features first, then by
+the version that introduced support, newest first.
 
 Exit codes:
 
