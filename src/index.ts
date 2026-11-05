@@ -1,4 +1,20 @@
 export {
+  loadFeaturescanConfig,
+  resolveCheckConfig,
+  resolveScanConfig
+} from "./config";
+export type {
+  CheckCliOverrides,
+  CheckConfig,
+  FeaturescanConfig,
+  LoadedFeaturescanConfig,
+  LoadFeaturescanConfigOptions,
+  ResolvedCheckConfig,
+  ResolvedScanConfig,
+  ScanCliOverrides,
+  ScanConfig
+} from "./config";
+export {
   checkFeatures,
   checkManifest,
   DEFAULT_DEPENDENCY_SOURCES

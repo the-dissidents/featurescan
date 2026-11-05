@@ -71,6 +71,57 @@ report goes to stdout. An interactive progress bar is shown on stderr and is
 disabled automatically when stderr is not a TTY. Report colors follow the
 report's destination stream; use `--no-color` or `NO_COLOR` to disable them.
 
+## Configuration
+
+`featurescan` looks for `featurescan.config.json` in the current directory.
+The loader also accepts `.js`, `.ts`, `.mjs`, `.cjs`, `.jsonc`, `.json5`,
+`.yaml`, and `.toml` variants, including files under `.config/`. Use
+`--config <path>` to load a specific file.
+
+Values are merged in this order:
+
+```text
+built-in defaults < config file < explicit CLI flags
+```
+
+Array values from the CLI replace the corresponding config array; they are not
+appended.
+
+```json
+{
+  "$schema": "./node_modules/featurescan/featurescan.config.schema.json",
+  "scan": {
+    "include": ["**/*.{html,htm,css,js,mjs,cjs}"],
+    "exclude": ["legacy/**"],
+    "format": "detailed",
+    "maxUsages": 0,
+    "out": "features.json",
+    "verbose": true,
+    "progress": true,
+    "quiet": false
+  },
+  "check": {
+    "browsers": ["safari@15.6", "chrome@120"],
+    "ignoreSources": ["**/legacy/**"],
+    "dependencySources": ["vendor/**"],
+    "groupByKind": true,
+    "fail": false,
+    "json": false,
+    "quiet": false
+  }
+}
+```
+
+- `scan`: `include`, `exclude`, `format`, `maxUsages`, `out`, `verbose`,
+  `progress`, `quiet`
+- `check`: `browsers`, `ignoreSources`, `dependencySources`, `groupByKind`,
+  `fail`, `json`, `quiet`
+
+The fully documented JSON Schema is exported as
+`featurescan/config.schema.json` and shipped at
+`node_modules/featurescan/featurescan.config.schema.json`. Each config file is
+validated against it; unknown keys and invalid values are reported as errors.
+
 ### Checking a manifest
 
 ```bash

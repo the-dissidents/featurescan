@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "featurescan configuration",
+  "description": "Optional project configuration for the featurescan CLI. Explicit command-line flags override values from this file, which override built-in defaults. Save this file as featurescan.config.json (or .js/.ts/.mjs/.cjs/.jsonc/.json5/.yaml/.toml) in the project root, or load it explicitly with --config <path>.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON Schema reference used by editors for completion and validation.",
+      "examples": ["./node_modules/featurescan/featurescan.config.schema.json"]
+    },
+    "scan": {
+      "$ref": "#/definitions/scan"
+    },
+    "check": {
+      "$ref": "#/definitions/check"
+    }
+  },
+  "definitions": {
+    "scan": {
+      "type": "object",
+      "description": "Defaults for the `featurescan scan` command.",
+      "additionalProperties": false,
+      "properties": {
+        "include": {
+          "type": "array",
+          "description": "Glob patterns for files to scan. When omitted, defaults to the built-in HTML/CSS/JS patterns. A value from this file replaces the built-in list; explicit --include flags replace this value.",
+          "default": ["**/*.{html,htm,css,js,mjs,cjs}"],
+          "items": {
+            "type": "string",
+            "description": "A glob pattern."
+          },
+          "examples": [["**/*.html", "assets/**/*.{css,js,mjs}"]]
+        },
+        "exclude": {
+          "type": "array",
+          "description": "Additional glob patterns to exclude. node_modules, .git, and source-map files are always excluded from standalone scanning. Explicit --exclude flags replace this value.",
+          "default": [],
+          "items": {
+            "type": "string",
+            "description": "A glob pattern."
+          },
+          "examples": [["legacy/**", "**/*.test.js"]]
+        },
+        "format": {
+          "type": "string",
+          "description": "Manifest output format. `json` emits a sorted array of keys, `lines` emits one key per line, and `detailed` emits feature objects with usage locations and source-map origins.",
+          "enum": ["json", "lines", "detailed"],
+          "default": "json",
+          "examples": ["detailed"]
+        },
+        "maxUsages": {
+          "type": "integer",
+          "description": "Maximum number of usage locations retained per feature. 0 means unlimited. When omitted, json/lines manifests use 50 and detailed manifests use unlimited.",
+          "minimum": 0,
+          "examples": [20, 0]
+        },
+        "out": {
+          "type": "string",
+          "description": "Manifest output path. Use `-` for stdout. When a file path is used, the human-readable report is printed to stdout instead of stderr.",
+          "examples": ["features.json", "reports/features.json"]
+        },
+        "verbose": {
+          "type": "boolean",
+          "description": "Show usage locations, including source-map origins, in the scan report.",
+          "default": false
+        },
+        "progress": {
+          "type": "boolean",
+          "description": "Show the interactive progress bar on stderr when stderr is a TTY. Use --no-progress on the command line to disable it.",
+          "default": true
+        },
+        "quiet": {
+          "type": "boolean",
+          "description": "Suppress the human-readable report and progress bar. The manifest is still written.",
+          "default": false
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "description": "Defaults for the `featurescan check` command.",
+      "additionalProperties": false,
+      "properties": {
+        "browsers": {
+          "type": "array",
+          "description": "Browser targets using name@version, name (latest stable), or name@latest. When omitted, every mainstream browser is checked at its latest stable version. Explicit --browser flags replace this value.",
+          "default": [],
+          "items": {
+            "type": "string",
+            "description": "A browser target such as safari@15.6 or chrome@120."
+          },
+          "examples": [["safari@15.6", "chrome@120"]]
+        },
+        "ignoreSources": {
+          "type": "array",
+          "description": "Glob patterns for original source paths to ignore entirely. An issue is ignored only when every usage matches this list. Source-map origins are used when available, otherwise built file paths. Explicit --ignore-source flags replace this value.",
+          "default": [],
+          "items": {
+            "type": "string",
+            "description": "A source path glob."
+          },
+          "examples": [["**/legacy/**", "**/*.generated.js"]]
+        },
+        "dependencySources": {
+          "type": "array",
+          "description": "Additional glob patterns for dependency sources. Issues whose usages all match the built-in `**/node_modules/**` pattern or this list are moved to the Dependencies category. Explicit --dependency-source flags replace this value.",
+          "default": [],
+          "items": {
+            "type": "string",
+            "description": "A source path glob."
+          },
+          "examples": [["vendor/**", "third_party/**"]]
+        },
+        "groupByKind": {
+          "type": "boolean",
+          "description": "Group issue categories under HTML, CSS, and JS headings instead of a flat target-level list.",
+          "default": false
+        },
+        "fail": {
+          "type": "boolean",
+          "description": "Exit with code 2 when first-party unsupported features are found. Dependency and ignored issues do not trigger this exit.",
+          "default": false
+        },
+        "json": {
+          "type": "boolean",
+          "description": "Print machine-readable JSON instead of the human-readable report.",
+          "default": false
+        },
+        "quiet": {
+          "type": "boolean",
+          "description": "Suppress the human-readable report. JSON output is unaffected.",
+          "default": false
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "scan": {
+        "format": "detailed",
+        "maxUsages": 0,
+        "out": "features.json"
+      },
+      "check": {
+        "browsers": ["safari@15.6", "chrome@120"],
+        "dependencySources": ["vendor/**"],
+        "groupByKind": true
+      }
+    }
+  ]
+}

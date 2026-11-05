@@ -5,6 +5,13 @@ import { checkFeatures } from "./check/index";
 import { resolveTargets } from "./check/targets";
 import { CompatDB } from "./compat/bcd";
 import {
+  loadFeaturescanConfig,
+  resolveCheckConfig,
+  resolveScanConfig,
+  type CheckCliOverrides,
+  type ScanCliOverrides
+} from "./config";
+import {
   formatDetailedManifest,
   formatManifest,
   manifestKeys,
@@ -17,36 +24,15 @@ import {
   printScanReport
 } from "./report/report";
 import { scan } from "./scan/index";
-import type { ManifestFormat } from "./types";
 import { VERSION } from "./version";
 
-interface ScanCliOptions {
-  out?: string;
-  format?: string;
-  include?: string[] | string;
-  exclude?: string[] | string;
-  maxUsages?: string | number;
-  verbose?: boolean;
-  quiet?: boolean;
-  progress?: boolean;
+interface ScanCliOptions extends ScanCliOverrides {
+  config?: string;
 }
 
-interface CheckCliOptions {
-  browser?: string[] | string;
-  json?: boolean;
-  fail?: boolean;
-  quiet?: boolean;
+interface CheckCliOptions extends CheckCliOverrides {
+  config?: string;
   listBrowsers?: boolean;
-  ignoreSource?: string[] | string;
-  dependencySource?: string[] | string;
-  groupByKind?: boolean;
-}
-
-function stringArray(value: string[] | string | undefined): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((entry): entry is string => typeof entry === "string");
-  }
-  return typeof value === "string" ? [value] : [];
 }
 
 function parseMaxUsages(value: string | number | undefined): number {
@@ -64,30 +50,31 @@ async function runScan(
   rootArg: string | undefined,
   options: ScanCliOptions
 ): Promise<void> {
-  const format = (options.format ?? "json") as ManifestFormat;
-  if (format !== "json" && format !== "lines" && format !== "detailed") {
-    throw new Error('--format must be "json", "lines", or "detailed"');
-  }
+  const loaded = await loadFeaturescanConfig({
+    configFile: options.config
+  });
+  const settings = resolveScanConfig(options, loaded.config.scan ?? {});
+  const format = settings.format;
 
   const started = Date.now();
-  const out = options.out;
+  const out = settings.out;
   const writeToFile = Boolean(out && out !== "-");
   const reportStream = writeToFile ? process.stdout : process.stderr;
   const showProgress =
-    !options.quiet &&
-    options.progress !== false &&
+    !settings.quiet &&
+    settings.progress &&
     process.env.TERM !== "dumb";
   const progress = new ProgressBar(process.stderr, showProgress);
   const maxUsages =
-    format === "detailed" && options.maxUsages === undefined
+    format === "detailed" && settings.maxUsages === undefined
       ? 0
-      : parseMaxUsages(options.maxUsages);
+      : parseMaxUsages(settings.maxUsages);
 
   const result = await (async () => {
     try {
       return await scan(rootArg ?? ".", {
-        include: stringArray(options.include),
-        exclude: stringArray(options.exclude),
+        include: settings.include,
+        exclude: settings.exclude,
         maxUsages,
         onProgress: showProgress
           ? (state) => progress.update(state)
@@ -113,8 +100,8 @@ async function runScan(
   }
 
   printScanReport(result, keys, {
-    verbose: options.verbose,
-    quiet: options.quiet,
+    verbose: settings.verbose,
+    quiet: settings.quiet,
     out: writeToFile ? out : undefined,
     durationMs: Date.now() - started,
     stream: reportStream
@@ -142,33 +129,39 @@ async function runCheck(
     throw new Error("missing manifest file");
   }
 
+  const loaded = await loadFeaturescanConfig({
+    configFile: options.config
+  });
+  const settings = resolveCheckConfig(options, loaded.config.check ?? {});
   const source = await readFile(manifestFile, "utf8");
   const manifest = parseManifestData(source);
-  const ignoreSources = stringArray(options.ignoreSource);
-  const dependencySources = stringArray(options.dependencySource);
 
   if (
     !manifest.detailed &&
-    (ignoreSources.length > 0 || dependencySources.length > 0)
+    (settings.ignoreSources.length > 0 ||
+      settings.dependencySources.length > 0)
   ) {
     throw new Error(
       "--ignore-source and --dependency-source require a detailed manifest; use scan --format detailed"
     );
   }
 
-  const targets = resolveTargets(stringArray(options.browser), compat);
+  const targets = resolveTargets(settings.browsers, compat);
   const result = checkFeatures(manifest.features, targets, compat, {
-    ignoreSources,
-    dependencySources
+    ignoreSources: settings.ignoreSources,
+    dependencySources: settings.dependencySources
   });
 
-  if (options.json) {
+  if (settings.json) {
     process.stdout.write(formatCheckJson(result));
-  } else if (!options.quiet) {
-    printCheckReport(result, { groupByKind: options.groupByKind });
+  } else if (!settings.quiet) {
+    printCheckReport(result, { groupByKind: settings.groupByKind });
   }
 
-  if (options.fail && result.targets.some((target) => target.unsupported.length > 0)) {
+  if (
+    settings.fail &&
+    result.targets.some((target) => target.unsupported.length > 0)
+  ) {
     process.exitCode = 2;
   }
 }
@@ -179,6 +172,7 @@ export async function main(argv = process.argv): Promise<void> {
   cli.help();
   cli.version(VERSION);
   cli.option("--no-color", "Disable colored output");
+  cli.option("--config <path>", "load configuration from this file");
 
   cli
     .command("scan [root]", "Scan a built site and emit a feature key manifest")
@@ -188,10 +182,7 @@ export async function main(argv = process.argv): Promise<void> {
     )
     .option(
       "--format <format>",
-      'manifest format: "json", "lines", or "detailed"',
-      {
-        default: "json"
-      }
+      'manifest format: "json", "lines", or "detailed" (default: json)'
     )
     .option("--include <glob>", "include glob (repeatable)", {
       type: [String]
@@ -205,7 +196,7 @@ export async function main(argv = process.argv): Promise<void> {
     )
     .option("-v, --verbose", "show usage locations in the report")
     .option("-q, --quiet", "suppress the report and progress bar")
-    .option("--no-progress", "disable the progress bar")
+    .option("--progress", "show the progress bar (use --no-progress to disable)")
     .action(runScan);
 
   cli

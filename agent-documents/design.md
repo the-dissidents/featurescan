@@ -48,6 +48,10 @@ Build/tooling:
 - pnpm, TypeScript, rolldown, Vitest.
 - `dist/cli.js` is the Node CLI; `dist/index.js` exposes the Node API.
 - Dependencies are external in the bundle; the CLI is not a single-file binary.
+- `c12` discovers and loads project configuration; `ajv` validates it against
+  the published JSON Schema at `featurescan.config.schema.json` (exported as
+  `featurescan/config.schema.json`). The schema is the documentation source for
+  config fields and defaults.
 
 ## CLI output and progress
 
@@ -60,6 +64,13 @@ Build/tooling:
 - Report colors are derived from the report's destination stream, not stdout,
   so redirected manifests do not strip color from a TTY report.
 - `--no-color` and `NO_COLOR` disable colors.
+- Config precedence is built-in defaults < config file < explicit CLI flags.
+  `--config <path>` loads a specific file. Arrays from the CLI replace config
+  arrays. Config loading is restricted to config files (no rc/package.json
+  discovery); `featurescan.config.*` and `.config/featurescan.config.*` are
+  supported.
+- Config fields are split into `scan` and `check` sections. The JSON Schema
+  documents every option, type, default, and example.
 - `--format detailed` emits `{ schemaVersion, tool, features }` with usage
   locations and source-map origins. Detailed scans default to unlimited usages
   so source-based filtering sees every origin.
@@ -178,5 +189,7 @@ This avoids blocking on ambiguous method names while still surfacing them.
 - Progress bar and destination-stream color tests.
 - Source-map mapping and detailed-manifest round-trip tests.
 - Source-based dependency classification and ignore tests.
+- Config loading, schema validation, explicit config paths, and CLI/config
+  precedence tests.
 
 Run with `pnpm test`, `pnpm typecheck`, and `pnpm build`.
