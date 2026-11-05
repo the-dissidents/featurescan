@@ -125,7 +125,7 @@ export function printScanReport(
 }
 
 function issueSources(issue: CheckIssue, colors: Colors): string {
-  const sources = issue.sourcePaths;
+  const sources = issue.displaySources ?? issue.sourcePaths;
   if (!sources || sources.length === 0) {
     return "";
   }

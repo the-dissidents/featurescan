@@ -73,6 +73,7 @@ describe("check report", () => {
               state: "unsupported",
               added: "16",
               sourcePaths: ["node_modules/pkg/index.css"],
+              displaySources: ["@scope/pkg 1.0.0"],
               usages: [
                 {
                   file: "dist/app.css",
@@ -98,7 +99,8 @@ describe("check report", () => {
     });
 
     expect(stream.output).toContain("Dependencies (1)");
-    expect(stream.output).toContain("node_modules/pkg/index.css");
+    expect(stream.output).toContain("@scope/pkg 1.0.0");
+    expect(stream.output).not.toContain("node_modules/pkg/index.css");
     expect(stream.output).toContain("All first-party features supported.");
   });
 

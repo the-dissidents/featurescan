@@ -77,14 +77,21 @@ Build/tooling:
 - `check --group-by-kind` nests unsupported/warnings/unknown/dependencies/
   ignored sections under HTML, CSS, and JS headings; the default flat layout
   keeps those categories at target level.
-- Detailed `check` output separates issues whose usages all originate from
-  `node_modules` into a `Dependencies` category by default.
-  `--dependency-source <glob>` adds more dependency paths, and
-  `--ignore-source <glob>` removes matching issues. They apply only when every
-  usage matches; mixed first-party/dependency usage keeps the issue in its
-  normal category. Dependency issues do not trigger `--fail`. Displayed source paths are filtered
-per category: primary issues omit dependency sources, while dependency issues
-show their dependency sources.
+- Detailed `check` output separates issues whose active usages all originate
+  from `node_modules` into a `Dependencies` category by default. Dependency paths
+  are parsed at check time: pnpm `.pnpm` segments become `name version`,
+  vanilla `node_modules` paths become a package name, and leading `../` segments
+  are trimmed for display.
+- Source filtering has four options: `includeSource`, `excludeSource`,
+  `includePackage`, and `excludePackage`. Source patterns match trimmed full
+  source paths; package patterns match parsed package names and optional
+  `@version` globs. A usage is excluded if it matches either exclude list. If
+  include lists are present, it must match at least one include. Excludes take
+  precedence. Issues with no active usages go to `Ignored`; otherwise only active
+  usages are classified and displayed.
+- `--show-dependency-paths` adds subpaths such as `dist/Popup.svelte`.
+  Dependency issues do not trigger `--fail`. Displayed primary sources omit
+  dependency paths; dependency sources display package labels.
 
 ## Detection rules
 
@@ -188,7 +195,8 @@ This avoids blocking on ambiguous method names while still surfacing them.
 - Check command/target resolution tests.
 - Progress bar and destination-stream color tests.
 - Source-map mapping and detailed-manifest round-trip tests.
-- Source-based dependency classification and ignore tests.
+- Source/package include/exclude precedence and pnpm/vanilla path parsing
+  tests.
 - Config loading, schema validation, explicit config paths, and CLI/config
   precedence tests.
 

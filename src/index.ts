@@ -16,8 +16,7 @@ export type {
 } from "./config";
 export {
   checkFeatures,
-  checkManifest,
-  DEFAULT_DEPENDENCY_SOURCES
+  checkManifest
 } from "./check/index";
 export type {
   BrowserTarget,

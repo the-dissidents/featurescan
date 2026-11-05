@@ -138,18 +138,23 @@ async function runCheck(
 
   if (
     !manifest.detailed &&
-    (settings.ignoreSources.length > 0 ||
-      settings.dependencySources.length > 0)
+    (settings.includeSource.length > 0 ||
+      settings.excludeSource.length > 0 ||
+      settings.includePackage.length > 0 ||
+      settings.excludePackage.length > 0)
   ) {
     throw new Error(
-      "--ignore-source and --dependency-source require a detailed manifest; use scan --format detailed"
+      "source and package filters require a detailed manifest; use scan --format detailed"
     );
   }
 
   const targets = resolveTargets(settings.browsers, compat);
   const result = checkFeatures(manifest.features, targets, compat, {
-    ignoreSources: settings.ignoreSources,
-    dependencySources: settings.dependencySources
+    includeSource: settings.includeSource,
+    excludeSource: settings.excludeSource,
+    includePackage: settings.includePackage,
+    excludePackage: settings.excludePackage,
+    showDependencyPaths: settings.showDependencyPaths
   });
 
   if (settings.json) {
@@ -208,14 +213,28 @@ export async function main(argv = process.argv): Promise<void> {
       type: [String]
     })
     .option(
-      "--ignore-source <glob>",
-      "ignore issues whose usages all match this source glob (repeatable)",
+      "--include-source <glob>",
+      "include usages whose source path matches this glob (repeatable)",
       { type: [String] }
     )
     .option(
-      "--dependency-source <glob>",
-      "classify issues whose usages all match this source glob as dependencies (repeatable; default: **/node_modules/**)",
+      "--exclude-source <glob>",
+      "exclude usages whose source path matches this glob (repeatable)",
       { type: [String] }
+    )
+    .option(
+      "--include-package <pattern>",
+      "include usages from matching packages, optionally package@version (repeatable)",
+      { type: [String] }
+    )
+    .option(
+      "--exclude-package <pattern>",
+      "exclude usages from matching packages, optionally package@version (repeatable)",
+      { type: [String] }
+    )
+    .option(
+      "--show-dependency-paths",
+      "include subpaths when displaying dependency packages"
     )
     .option("--group-by-kind", "group issues under HTML, CSS, and JS")
     .option("--json", "print machine-readable JSON")

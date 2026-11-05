@@ -33,6 +33,9 @@ describe("checkManifest", () => {
     expect(result.targets[0]?.dependencies[0]?.sourcePaths).toEqual([
       "node_modules/.pnpm/@codemirror+view@6.43.13/node_modules/@codemirror/view/dist/index.css"
     ]);
+    expect(result.targets[0]?.dependencies[0]?.displaySources).toEqual([
+      "@codemirror/view 6.43.13"
+    ]);
 
     const mixed = checkFeatures(
       [
@@ -59,9 +62,12 @@ describe("checkManifest", () => {
     expect(mixed.targets[0]?.unsupported[0]?.sourcePaths).toEqual([
       "src/app.css"
     ]);
+    expect(mixed.targets[0]?.unsupported[0]?.displaySources).toEqual([
+      "src/app.css"
+    ]);
   });
 
-  it("supports additional dependency source globs", () => {
+  it("includes only matching sources and packages", () => {
     const feature = {
       key: "css.properties.container-type",
       usages: [
@@ -69,25 +75,134 @@ describe("checkManifest", () => {
           file: "dist/app.css",
           line: 1,
           column: 1,
-          source: { file: "vendor/lib.css", line: 2, column: 3 }
+          source: { file: "src/app.css", line: 2, column: 3 }
+        },
+        {
+          file: "dist/app.css",
+          line: 10,
+          column: 1,
+          source: {
+            file: "../../node_modules/.pnpm/@codemirror+view@6.43.13/node_modules/@codemirror/view/dist/index.css",
+            line: 20,
+            column: 3
+          }
         }
       ]
     };
     const target = [{ browser: "safari", version: "15.6" }];
 
-    const byDefault = checkFeatures([feature], target, compat);
-    expect(byDefault.targets[0]?.dependencies).toEqual([]);
-    expect(byDefault.targets[0]?.unsupported[0]?.key).toBe(
-      "css.properties.container-type"
-    );
-
-    const custom = checkFeatures([feature], target, compat, {
-      dependencySources: ["vendor/**"]
+    const sourceOnly = checkFeatures([feature], target, compat, {
+      includeSource: ["src/**"]
     });
-    expect(custom.targets[0]?.unsupported).toEqual([]);
-    expect(custom.targets[0]?.dependencies[0]?.key).toBe(
-      "css.properties.container-type"
-    );
+    expect(sourceOnly.targets[0]?.unsupported[0]?.displaySources).toEqual([
+      "src/app.css"
+    ]);
+    expect(sourceOnly.targets[0]?.dependencies).toEqual([]);
+
+    const packageOnly = checkFeatures([feature], target, compat, {
+      includePackage: ["@codemirror/*"]
+    });
+    expect(packageOnly.targets[0]?.unsupported).toEqual([]);
+    expect(packageOnly.targets[0]?.dependencies[0]?.displaySources).toEqual([
+      "@codemirror/view 6.43.13"
+    ]);
+
+    const versionedPackage = checkFeatures([feature], target, compat, {
+      includePackage: ["@codemirror/view@6.*"]
+    });
+    expect(versionedPackage.targets[0]?.dependencies).toHaveLength(1);
+
+    const noMatch = checkFeatures([feature], target, compat, {
+      includePackage: ["@codemirror/view@9.0.0"]
+    });
+    expect(noMatch.targets[0]?.ignored).toHaveLength(1);
+
+    const both = checkFeatures([feature], target, compat, {
+      includeSource: ["src/**"],
+      includePackage: ["@codemirror/*"]
+    });
+    expect(both.targets[0]?.unsupported[0]?.displaySources).toEqual([
+      "src/app.css"
+    ]);
+  });
+
+  it("lets excludes take precedence over includes", () => {
+    const feature = {
+      key: "css.properties.container-type",
+      usages: [
+        {
+          file: "dist/app.css",
+          line: 1,
+          column: 1,
+          source: { file: "src/app.css", line: 2, column: 3 }
+        },
+        {
+          file: "dist/app.css",
+          line: 10,
+          column: 1,
+          source: {
+            file: "../../node_modules/.pnpm/@codemirror+view@6.43.13/node_modules/@codemirror/view/dist/index.css",
+            line: 20,
+            column: 3
+          }
+        }
+      ]
+    };
+    const target = [{ browser: "safari", version: "15.6" }];
+
+    const excludedSource = checkFeatures([feature], target, compat, {
+      includeSource: ["src/**"],
+      excludeSource: ["src/**"]
+    });
+    expect(excludedSource.targets[0]?.ignored).toHaveLength(1);
+    expect(excludedSource.targets[0]?.unsupported).toEqual([]);
+    expect(excludedSource.targets[0]?.dependencies).toEqual([]);
+
+    const excludedPackage = checkFeatures([feature], target, compat, {
+      excludePackage: ["@codemirror/view@6.43.13"]
+    });
+    expect(excludedPackage.targets[0]?.unsupported[0]?.displaySources).toEqual([
+      "src/app.css"
+    ]);
+
+    const excludedEverything = checkFeatures([feature], target, compat, {
+      excludeSource: ["src/**"],
+      excludePackage: ["@codemirror/*"]
+    });
+    expect(excludedEverything.targets[0]?.ignored).toHaveLength(1);
+    expect(excludedEverything.targets[0]?.unsupported).toEqual([]);
+    expect(excludedEverything.targets[0]?.dependencies).toEqual([]);
+  });
+
+  it("optionally shows dependency subpaths", () => {
+    const feature = {
+      key: "css.properties.container-type",
+      usages: [
+        {
+          file: "dist/app.css",
+          line: 1,
+          column: 1,
+          source: {
+            file: "../../../../node_modules/.pnpm/@scope+pkg@1.2.3/node_modules/@scope/pkg/dist/index.css",
+            line: 2,
+            column: 3
+          }
+        }
+      ]
+    };
+    const target = [{ browser: "safari", version: "15.6" }];
+
+    const withoutPaths = checkFeatures([feature], target, compat);
+    expect(withoutPaths.targets[0]?.dependencies[0]?.displaySources).toEqual([
+      "@scope/pkg 1.2.3"
+    ]);
+
+    const withPaths = checkFeatures([feature], target, compat, {
+      showDependencyPaths: true
+    });
+    expect(withPaths.targets[0]?.dependencies[0]?.displaySources).toEqual([
+      "@scope/pkg 1.2.3 (dist/index.css)"
+    ]);
   });
 
   it("ignores issues from matching source files", () => {
@@ -108,7 +223,7 @@ describe("checkManifest", () => {
     };
     const target = [{ browser: "safari", version: "15.6" }];
     const ignored = checkFeatures([feature], target, compat, {
-      ignoreSources: ["**/node_modules/**"]
+      excludeSource: ["**/node_modules/**"]
     });
     expect(ignored.targets[0]?.unsupported).toEqual([]);
     expect(ignored.targets[0]?.dependencies).toEqual([]);

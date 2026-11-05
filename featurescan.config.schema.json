@@ -93,25 +93,50 @@
           },
           "examples": [["safari@15.6", "chrome@120"]]
         },
-        "ignoreSources": {
+        "includeSource": {
           "type": "array",
-          "description": "Glob patterns for original source paths to ignore entirely. An issue is ignored only when every usage matches this list. Source-map origins are used when available, otherwise built file paths. Explicit --ignore-source flags replace this value.",
+          "description": "Glob patterns selecting source paths to include. When non-empty, a usage must match an includeSource or includePackage pattern to be active. Excludes take precedence. Explicit --include-source flags replace this config value.",
           "default": [],
           "items": {
             "type": "string",
-            "description": "A source path glob."
+            "description": "A source path glob, matched against the trimmed source path."
+          },
+          "examples": [["src/**", "app/**"]]
+        },
+        "excludeSource": {
+          "type": "array",
+          "description": "Glob patterns excluding source paths. A usage matching any excludeSource or excludePackage pattern is inactive even if it also matches an include. Explicit --exclude-source flags replace this config value.",
+          "default": [],
+          "items": {
+            "type": "string",
+            "description": "A source path glob, matched against the trimmed source path."
           },
           "examples": [["**/legacy/**", "**/*.generated.js"]]
         },
-        "dependencySources": {
+        "includePackage": {
           "type": "array",
-          "description": "Additional glob patterns for dependency sources. Issues whose usages all match the built-in `**/node_modules/**` pattern or this list are moved to the Dependencies category. Explicit --dependency-source flags replace this value.",
+          "description": "Package patterns selecting node_modules sources to include. Patterns match the parsed package name and support an optional @version suffix, with glob syntax allowed in both parts, for example @codemirror/* or @codemirror/view@6.*. Explicit --include-package flags replace this config value.",
           "default": [],
           "items": {
             "type": "string",
-            "description": "A source path glob."
+            "description": "A package name glob with an optional @version glob."
           },
-          "examples": [["vendor/**", "third_party/**"]]
+          "examples": [["@codemirror/*", "bits-ui@2.19.3"]]
+        },
+        "excludePackage": {
+          "type": "array",
+          "description": "Package patterns excluding node_modules sources. Patterns match the parsed package name and support an optional @version suffix, with glob syntax allowed in both parts. Excludes take precedence over includes. Explicit --exclude-package flags replace this config value.",
+          "default": [],
+          "items": {
+            "type": "string",
+            "description": "A package name glob with an optional @version glob."
+          },
+          "examples": [["@codemirror/*", "bits-ui@2.19.3"]]
+        },
+        "showDependencyPaths": {
+          "type": "boolean",
+          "description": "Include package subpaths such as dist/Popup.svelte when displaying dependency sources. By default only the parsed package name and version are shown.",
+          "default": false
         },
         "groupByKind": {
           "type": "boolean",
@@ -145,7 +170,8 @@
       },
       "check": {
         "browsers": ["safari@15.6", "chrome@120"],
-        "dependencySources": ["vendor/**"],
+        "includeSource": ["src/**"],
+        "excludePackage": ["@the_dissidents/*@0.0.28"],
         "groupByKind": true
       }
     }

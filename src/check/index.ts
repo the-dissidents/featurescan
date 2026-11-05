@@ -6,6 +6,12 @@ import {
   type SupportEvaluation,
   type SupportState
 } from "../compat/support";
+import {
+  formatDependency,
+  normalizeSourcePath,
+  parseDependencyPath,
+  type DependencyLocation
+} from "../dependencies";
 import type { Usage } from "../types";
 import { compareStrings } from "../util";
 
@@ -20,11 +26,12 @@ export interface CheckFeature {
 }
 
 export interface CheckOptions {
-  ignoreSources?: string[];
-  dependencySources?: string[];
+  includeSource?: string[];
+  excludeSource?: string[];
+  includePackage?: string[];
+  excludePackage?: string[];
+  showDependencyPaths?: boolean;
 }
-
-export const DEFAULT_DEPENDENCY_SOURCES = ["**/node_modules/**"];
 
 export interface CheckIssue {
   key: string;
@@ -39,6 +46,7 @@ export interface CheckIssue {
   reason?: string;
   usages?: Usage[];
   sourcePaths?: string[];
+  displaySources?: string[];
 }
 
 export interface TargetResult extends BrowserTarget {
@@ -64,6 +72,25 @@ const WARNING_STATES = new Set<SupportState>([
 ]);
 
 const CSS_PROPERTY_PREFIX = /^-(webkit|moz|ms|o|khtml)-(.+)$/;
+
+const ISSUE_STATE_ORDER: Record<SupportState, number> = {
+  unsupported: 0,
+  partial: 1,
+  flagged: 2,
+  prefixed: 3,
+  alternative: 4,
+  unknown: 5,
+  supported: 6
+};
+
+type Matcher = (value: string) => boolean;
+type SourceMode = "primary" | "dependency" | "ignored";
+type SourceClassification = "none" | "dependency";
+
+interface PackageMatcher {
+  name: Matcher;
+  version?: Matcher;
+}
 
 function addedVersion(issue: CheckIssue): string | undefined {
   if (typeof issue.added === "string") {
@@ -114,86 +141,127 @@ function cssPrefixMarker(
   return { baseKey, prefix };
 }
 
-type Matcher = (value: string) => boolean;
-type SourceClassification = "none" | "ignored" | "dependency";
-
-const ISSUE_STATE_ORDER: Record<SupportState, number> = {
-  unsupported: 0,
-  partial: 1,
-  flagged: 2,
-  prefixed: 3,
-  alternative: 4,
-  unknown: 5,
-  supported: 6
-};
-
 function compileMatchers(globs: string[] | undefined): Matcher[] {
   return (globs ?? []).map((glob) => picomatch(glob, { dot: true }));
 }
 
-function sourcePath(usage: Usage): string {
-  const value = (usage.source?.file ?? usage.file).replaceAll("\\", "/");
-  const parts: string[] = [];
-
-  for (const part of value.split("/")) {
-    if (!part || part === ".") {
-      continue;
+function splitPackagePattern(pattern: string): {
+  name: string;
+  version?: string;
+} {
+  const versionIndex = pattern.lastIndexOf("@");
+  if (versionIndex > 0) {
+    const version = pattern.slice(versionIndex + 1);
+    if (version) {
+      return { name: pattern.slice(0, versionIndex), version };
     }
-    if (part === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(part);
   }
+  return { name: pattern };
+}
 
-  return parts.join("/");
+function compilePackageMatchers(patterns: string[] | undefined): PackageMatcher[] {
+  return (patterns ?? []).map((pattern) => {
+    const parsed = splitPackagePattern(pattern);
+    return {
+      name: picomatch(parsed.name, { dot: true }),
+      ...(parsed.version
+        ? { version: picomatch(parsed.version, { dot: true }) }
+        : {})
+    };
+  });
+}
+
+function sourcePath(usage: Usage): string {
+  return normalizeSourcePath(usage.source?.file ?? usage.file);
 }
 
 function matchesAny(value: string, matchers: Matcher[]): boolean {
   return matchers.some((match) => match(value));
 }
 
-function displaySources(
+function matchesPackage(
+  dependency: DependencyLocation,
+  matchers: PackageMatcher[]
+): boolean {
+  return matchers.some((matcher) => {
+    if (!matcher.name(dependency.name)) {
+      return false;
+    }
+    if (!matcher.version) {
+      return true;
+    }
+    return Boolean(dependency.version && matcher.version(dependency.version));
+  });
+}
+
+function isUsageActive(
+  usage: Usage,
+  includeSource: Matcher[],
+  excludeSource: Matcher[],
+  includePackage: PackageMatcher[],
+  excludePackage: PackageMatcher[]
+): boolean {
+  const source = sourcePath(usage);
+  const dependency = parseDependencyPath(source);
+
+  const excluded =
+    matchesAny(source, excludeSource) ||
+    Boolean(dependency && matchesPackage(dependency, excludePackage));
+  if (excluded) {
+    return false;
+  }
+
+  if (includeSource.length === 0 && includePackage.length === 0) {
+    return true;
+  }
+
+  return (
+    matchesAny(source, includeSource) ||
+    Boolean(dependency && matchesPackage(dependency, includePackage))
+  );
+}
+
+function classifyUsages(usages: Usage[]): SourceClassification {
+  if (usages.length === 0) {
+    return "none";
+  }
+  return usages.every((usage) =>
+    Boolean(parseDependencyPath(sourcePath(usage)))
+  )
+    ? "dependency"
+    : "none";
+}
+
+function computeSources(
   usages: Usage[] | undefined,
-  classification: SourceClassification,
-  dependencyMatchers: Matcher[]
-): string[] | undefined {
+  mode: SourceMode,
+  showDependencyPaths: boolean
+): { sourcePaths?: string[]; displaySources?: string[] } {
   if (!usages || usages.length === 0) {
-    return undefined;
+    return {};
   }
 
   const sources = [...new Set(usages.map(sourcePath))].sort(compareStrings);
-  const display =
-    classification === "none"
-      ? sources.filter((source) => !matchesAny(source, dependencyMatchers))
+  const sourcePaths =
+    mode === "primary"
+      ? sources.filter((source) => !parseDependencyPath(source))
       : sources;
 
-  return display.length > 0 ? display : undefined;
-}
+  const displaySources = [
+    ...new Set(
+      sourcePaths.map((source) => {
+        const dependency = parseDependencyPath(source);
+        return dependency
+          ? formatDependency(dependency, showDependencyPaths)
+          : source;
+      })
+    )
+  ].sort(compareStrings);
 
-function classifyUsages(
-  usages: Usage[] | undefined,
-  ignoreMatchers: Matcher[],
-  dependencyMatchers: Matcher[]
-): SourceClassification {
-  if (!usages || usages.length === 0) {
-    return "none";
-  }
-
-  const sources = usages.map(sourcePath);
-  if (
-    ignoreMatchers.length > 0 &&
-    sources.every((source) => ignoreMatchers.some((match) => match(source)))
-  ) {
-    return "ignored";
-  }
-  if (
-    dependencyMatchers.length > 0 &&
-    sources.every((source) => dependencyMatchers.some((match) => match(source)))
-  ) {
-    return "dependency";
-  }
-  return "none";
+  return {
+    ...(sourcePaths.length > 0 ? { sourcePaths } : {}),
+    ...(displaySources.length > 0 ? { displaySources } : {})
+  };
 }
 
 export function checkFeatures(
@@ -237,11 +305,11 @@ export function checkFeatures(
     }
   }
 
-  const ignoreMatchers = compileMatchers(options.ignoreSources);
-  const dependencyMatchers = compileMatchers([
-    ...DEFAULT_DEPENDENCY_SOURCES,
-    ...(options.dependencySources ?? [])
-  ]);
+  const includeSource = compileMatchers(options.includeSource);
+  const excludeSource = compileMatchers(options.excludeSource);
+  const includePackage = compilePackageMatchers(options.includePackage);
+  const excludePackage = compilePackageMatchers(options.excludePackage);
+  const showDependencyPaths = options.showDependencyPaths ?? false;
 
   const targetResults: TargetResult[] = targets.map((target) => {
     const unsupported: CheckIssue[] = [];
@@ -274,28 +342,52 @@ export function checkFeatures(
         continue;
       }
 
-      const classification = classifyUsages(
-        usages,
-        ignoreMatchers,
-        dependencyMatchers
-      );
-      const sourcePaths = displaySources(
-        usages,
-        classification,
-        dependencyMatchers
+      let effectiveUsages = usages;
+      let mode: SourceMode = "primary";
+
+      if (usages) {
+        const active = usages.filter((usage) =>
+          isUsageActive(
+            usage,
+            includeSource,
+            excludeSource,
+            includePackage,
+            excludePackage
+          )
+        );
+        if (active.length === 0) {
+          const sources = computeSources(
+            usages,
+            "ignored",
+            showDependencyPaths
+          );
+          ignored.push({
+            key,
+            ...evaluation,
+            usages,
+            ...sources
+          });
+          continue;
+        }
+
+        effectiveUsages = active;
+        mode =
+          classifyUsages(active) === "dependency" ? "dependency" : "primary";
+      }
+
+      const sources = computeSources(
+        effectiveUsages,
+        mode,
+        showDependencyPaths
       );
       const issue: CheckIssue = {
         key,
         ...evaluation,
-        ...(usages ? { usages } : {}),
-        ...(sourcePaths ? { sourcePaths } : {})
+        ...(effectiveUsages ? { usages: effectiveUsages } : {}),
+        ...sources
       };
 
-      if (classification === "ignored") {
-        ignored.push(issue);
-        continue;
-      }
-      if (classification === "dependency") {
+      if (mode === "dependency") {
         dependencies.push(issue);
         continue;
       }

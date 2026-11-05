@@ -16,8 +16,11 @@ export interface ScanConfig {
 
 export interface CheckConfig {
   browsers?: string[];
-  ignoreSources?: string[];
-  dependencySources?: string[];
+  includeSource?: string[];
+  excludeSource?: string[];
+  includePackage?: string[];
+  excludePackage?: string[];
+  showDependencyPaths?: boolean;
   groupByKind?: boolean;
   fail?: boolean;
   json?: boolean;
@@ -53,8 +56,11 @@ export interface ScanCliOverrides {
 
 export interface CheckCliOverrides {
   browser?: string[] | string;
-  ignoreSource?: string[] | string;
-  dependencySource?: string[] | string;
+  includeSource?: string[] | string;
+  excludeSource?: string[] | string;
+  includePackage?: string[] | string;
+  excludePackage?: string[] | string;
+  showDependencyPaths?: boolean;
   groupByKind?: boolean;
   fail?: boolean;
   json?: boolean;
@@ -74,8 +80,11 @@ export interface ResolvedScanConfig {
 
 export interface ResolvedCheckConfig {
   browsers: string[];
-  ignoreSources: string[];
-  dependencySources: string[];
+  includeSource: string[];
+  excludeSource: string[];
+  includePackage: string[];
+  excludePackage: string[];
+  showDependencyPaths: boolean;
   groupByKind: boolean;
   fail: boolean;
   json: boolean;
@@ -128,10 +137,16 @@ export function resolveCheckConfig(
   return {
     browsers:
       cliStringArray(cli.browser) ?? config.browsers ?? [],
-    ignoreSources:
-      cliStringArray(cli.ignoreSource) ?? config.ignoreSources ?? [],
-    dependencySources:
-      cliStringArray(cli.dependencySource) ?? config.dependencySources ?? [],
+    includeSource:
+      cliStringArray(cli.includeSource) ?? config.includeSource ?? [],
+    excludeSource:
+      cliStringArray(cli.excludeSource) ?? config.excludeSource ?? [],
+    includePackage:
+      cliStringArray(cli.includePackage) ?? config.includePackage ?? [],
+    excludePackage:
+      cliStringArray(cli.excludePackage) ?? config.excludePackage ?? [],
+    showDependencyPaths:
+      cli.showDependencyPaths ?? config.showDependencyPaths ?? false,
     groupByKind: cli.groupByKind ?? config.groupByKind ?? false,
     fail: cli.fail ?? config.fail ?? false,
     json: cli.json ?? config.json ?? false,

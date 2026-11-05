@@ -102,8 +102,11 @@ appended.
   },
   "check": {
     "browsers": ["safari@15.6", "chrome@120"],
-    "ignoreSources": ["**/legacy/**"],
-    "dependencySources": ["vendor/**"],
+    "includeSource": ["src/**"],
+    "excludeSource": ["legacy/**"],
+    "includePackage": ["@codemirror/*"],
+    "excludePackage": ["@the_dissidents/*@0.0.28"],
+    "showDependencyPaths": false,
     "groupByKind": true,
     "fail": false,
     "json": false,
@@ -114,8 +117,9 @@ appended.
 
 - `scan`: `include`, `exclude`, `format`, `maxUsages`, `out`, `verbose`,
   `progress`, `quiet`
-- `check`: `browsers`, `ignoreSources`, `dependencySources`, `groupByKind`,
-  `fail`, `json`, `quiet`
+- `check`: `browsers`, `includeSource`, `excludeSource`, `includePackage`,
+  `excludePackage`, `showDependencyPaths`, `groupByKind`, `fail`, `json`,
+  `quiet`
 
 The fully documented JSON Schema is exported as
 `featurescan/config.schema.json` and shipped at
@@ -140,11 +144,17 @@ featurescan check features.json --browser safari@15.6 --json
 # Fail CI when anything is unsupported
 featurescan check features.json --browser safari@15.6 --fail
 
-# With a detailed manifest, ignore issues from matching sources entirely
-featurescan check features-detailed.json --ignore-source '**/node_modules/**'
+# Include only first-party sources
+featurescan check features-detailed.json --include-source 'src/**'
 
-# Classify additional paths as dependencies
-featurescan check features-detailed.json --dependency-source 'vendor/**'
+# Exclude a dependency package or version
+featurescan check features-detailed.json --exclude-package '@the_dissidents/svelte-ui@0.0.28'
+
+# Focus on selected packages
+featurescan check features-detailed.json --include-package '@codemirror/*'
+
+# Include dependency subpaths such as dist/Popup.svelte
+featurescan check features-detailed.json --show-dependency-paths
 ```
 
 `--browser` accepts `name@version`, `name` (latest stable), or `name@latest`.
@@ -158,15 +168,31 @@ Prefixed-CSS warnings are suppressed when the manifest contains a matching
 Unsupported features are sorted with never-supported features first, then by
 the version that introduced support, newest first.
 
-Issues whose usages all originate from `node_modules` are moved to a separate
-`Dependencies` category by default. `--dependency-source <glob>` adds more
-dependency paths, and `--ignore-source <glob>` removes matching issues
-entirely. These only apply when **all** usages of a feature match, so a feature
-also used by first-party code stays in its normal category. Dependency issues
-do not trigger `--fail`. Source matching uses the original source-map path when
-available, otherwise the built file path. Source lists shown next to issues are
-filtered to their category, so dependency paths do not appear under primary
-unsupported/warning/unknown lists.
+Issues whose active usages all originate from `node_modules` are moved to a
+separate `Dependencies` category by default. Dependency issues do not trigger
+`--fail`.
+
+Source filtering uses four options:
+
+- `includeSource` / `excludeSource` match the trimmed full source path.
+- `includePackage` / `excludePackage` match the parsed package from a
+  `node_modules` path, with an optional `@version` suffix. Glob patterns are
+  allowed in both parts, for example `@codemirror/*`,
+  `@the_dissidents/svelte-ui@0.0.28`, or `colorjs.io@0.7.*`.
+
+A usage is excluded when it matches either exclude list. If any include list is
+present, a usage must match at least one include pattern; otherwise it is
+filtered out. Excludes take precedence over includes. Issues with no remaining
+active usages are listed under `Ignored`; partially filtered issues keep only
+their active usages for classification and display. Source and package filters
+require a detailed manifest because keys-only manifests have no usage paths.
+
+Check-time source display trims leading `../` segments for readability; the
+manifest remains unchanged. For pnpm paths, the dependency name and version are
+parsed from `.pnpm` and displayed as `@scope/package 1.2.3`. Vanilla
+`node_modules` paths display the package name. Pass
+`--show-dependency-paths` (or set `check.showDependencyPaths` in config) to
+append the package subpath such as `dist/Popup.svelte`.
 
 Exit codes:
 
