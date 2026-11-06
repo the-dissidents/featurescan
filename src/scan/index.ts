@@ -22,7 +22,7 @@ export async function scan(
     options
   );
   const maxUsages =
-    options.maxUsages === undefined ? 50 : options.maxUsages;
+    options.maxUsages === undefined ? 10 : options.maxUsages;
   const catalog = new Catalog(maxUsages === 0 ? Infinity : maxUsages);
   const diagnostics: Diagnostic[] = [];
   const context: ScanContext = {

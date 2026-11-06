@@ -94,7 +94,7 @@ appended.
     "include": ["**/*.{html,htm,css,js,mjs,cjs}"],
     "exclude": ["legacy/**"],
     "format": "detailed",
-    "maxUsages": 0,
+    "maxUsages": 10,
     "out": "features.json",
     "verbose": true,
     "progress": true,
@@ -269,9 +269,10 @@ resolved from local files, `file:` URLs, and data URLs. Remote source maps are
 ignored. Verbose scan reports show the mapped location as
 `generated -> original`.
 
-Detailed manifests default to unlimited usages so source filtering sees every
-origin; pass `--max-usages <n>` to cap them. Keys-only manifests remain the
-default for runtime compatibility checks.
+Detailed manifests retain at most 10 usages per feature per package by default;
+non-dependency sources share one project bucket. Set `--max-usages 0` for
+unlimited usages or a higher value for more precise source filtering. Keys-only
+manifests remain the default for runtime compatibility checks.
 
 ## Library API
 

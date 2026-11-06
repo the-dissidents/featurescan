@@ -52,9 +52,10 @@
         },
         "maxUsages": {
           "type": "integer",
-          "description": "Maximum number of usage locations retained per feature. 0 means unlimited. When omitted, json/lines manifests use 50 and detailed manifests use unlimited.",
+          "description": "Maximum number of usage locations retained per feature per package. Non-dependency sources share one project bucket. 0 means unlimited. Defaults to 10.",
+          "default": 10,
           "minimum": 0,
-          "examples": [20, 0]
+          "examples": [10, 0]
         },
         "out": {
           "type": "string",
@@ -165,7 +166,7 @@
     {
       "scan": {
         "format": "detailed",
-        "maxUsages": 0,
+        "maxUsages": 10,
         "out": "features.json"
       },
       "check": {

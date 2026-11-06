@@ -1,5 +1,17 @@
+import {
+  normalizeSourcePath,
+  parseDependencyPath
+} from "../dependencies";
 import type { Confidence, Detection, FeatureKind, Usage } from "../types";
 import { compareStrings } from "../util";
+
+function usageBucket(usage: Usage): string {
+  const source = normalizeSourcePath(usage.source?.file ?? usage.file);
+  const dependency = parseDependencyPath(source);
+  return dependency
+    ? `${dependency.name}@${dependency.version ?? ""}`
+    : "\0project";
+}
 
 const confidenceRank: Record<Confidence, number> = {
   low: 0,
@@ -9,10 +21,11 @@ const confidenceRank: Record<Confidence, number> = {
 
 export class Catalog {
   readonly #features = new Map<string, Detection>();
-  readonly #maxUsagesPerFeature: number;
+  readonly #bucketCounts = new Map<string, Map<string, number>>();
+  readonly #maxUsagesPerBucket: number;
 
-  constructor(maxUsagesPerFeature = 50) {
-    this.#maxUsagesPerFeature = maxUsagesPerFeature;
+  constructor(maxUsagesPerBucket = 10) {
+    this.#maxUsagesPerBucket = maxUsagesPerBucket;
   }
 
   add(
@@ -29,7 +42,13 @@ export class Catalog {
       feature.confidence = confidence;
     }
 
-    if (feature.usages.length >= this.#maxUsagesPerFeature) {
+    const bucket = usageBucket(usage);
+    let counts = this.#bucketCounts.get(key);
+    if (!counts) {
+      counts = new Map<string, number>();
+      this.#bucketCounts.set(key, counts);
+    }
+    if ((counts.get(bucket) ?? 0) >= this.#maxUsagesPerBucket) {
       return;
     }
 
@@ -42,6 +61,7 @@ export class Catalog {
       )
     ) {
       feature.usages.push(usage);
+      counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
     }
   }
 

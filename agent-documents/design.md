@@ -72,8 +72,9 @@ Build/tooling:
 - Config fields are split into `scan` and `check` sections. The JSON Schema
   documents every option, type, default, and example.
 - `--format detailed` emits `{ schemaVersion, tool, features }` with usage
-  locations and source-map origins. Detailed scans default to unlimited usages
-  so source-based filtering sees every origin.
+  locations and source-map origins. Usage retention is capped at 10 per feature
+  per package by default; non-dependency sources share one project bucket. Set
+  `maxUsages` to 0 for unlimited retention.
 - `check --group-by-kind` nests unsupported/warnings/unknown/dependencies/
   ignored sections under HTML, CSS, and JS headings; the default flat layout
   keeps those categories at target level.

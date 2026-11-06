@@ -37,7 +37,7 @@ interface CheckCliOptions extends CheckCliOverrides {
 
 function parseMaxUsages(value: string | number | undefined): number {
   if (value === undefined) {
-    return 50;
+    return 10;
   }
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
@@ -65,10 +65,7 @@ async function runScan(
     settings.progress &&
     process.env.TERM !== "dumb";
   const progress = new ProgressBar(process.stderr, showProgress);
-  const maxUsages =
-    format === "detailed" && settings.maxUsages === undefined
-      ? 0
-      : parseMaxUsages(settings.maxUsages);
+  const maxUsages = parseMaxUsages(settings.maxUsages);
 
   const result = await (async () => {
     try {
@@ -197,7 +194,7 @@ export async function main(argv = process.argv): Promise<void> {
     })
     .option(
       "--max-usages <count>",
-      "maximum usage locations per feature (0 = unlimited; detailed defaults to unlimited)"
+      "maximum usage locations per feature per package (default: 10; 0 = unlimited)"
     )
     .option("-v, --verbose", "show usage locations in the report")
     .option("-q, --quiet", "suppress the report and progress bar")
