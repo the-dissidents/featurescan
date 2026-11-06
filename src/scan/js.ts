@@ -13,9 +13,9 @@ import {
   SPECIAL_GLOBAL_KEYS,
   WINDOW_GLOBAL_FUNCTIONS
 } from "../rules/js";
-import type { Confidence, Usage } from "../types";
+import type { Confidence, OriginalLocation, Usage } from "../types";
 import type { ScanContext } from "./context";
-import { addFeature, warn } from "./context";
+import { addFeature, canAddFeature, warn } from "./context";
 import { makeUsage } from "./source";
 import { normalizeOriginalSource } from "./sourcemap";
 
@@ -57,12 +57,48 @@ function localPosition(
   return { line: localLine, column: localColumn };
 }
 
+function originalLocationFor(
+  node: t.Node,
+  sourceMap: SourceMapConsumer | undefined
+): OriginalLocation | undefined {
+  if (!sourceMap) {
+    return undefined;
+  }
+  const start = node.loc?.start;
+  if (!start) {
+    return undefined;
+  }
+
+  try {
+    const original = sourceMap.originalPositionFor({
+      line: start.line,
+      column: start.column
+    });
+    if (
+      original.source &&
+      original.line !== null &&
+      original.column !== null
+    ) {
+      return {
+        file: normalizeOriginalSource(original.source),
+        line: original.line,
+        column: original.column + 1,
+        ...(original.name ? { name: original.name } : {})
+      };
+    }
+  } catch {
+    // Ignore malformed mappings and keep the generated location.
+  }
+
+  return undefined;
+}
+
 function usageFor(
   node: t.Node,
   file: string,
   source: string,
   base: JsBasePosition | undefined,
-  sourceMap: SourceMapConsumer | undefined
+  original: OriginalLocation | undefined
 ): Usage | undefined {
   const start = node.loc?.start;
   if (!start) {
@@ -80,29 +116,8 @@ function usageFor(
     local.column
   );
 
-  if (!sourceMap) {
-    return usage;
-  }
-
-  try {
-    const original = sourceMap.originalPositionFor({
-      line,
-      column: start.column
-    });
-    if (
-      original.source &&
-      original.line !== null &&
-      original.column !== null
-    ) {
-      usage.source = {
-        file: normalizeOriginalSource(original.source),
-        line: original.line,
-        column: original.column + 1,
-        ...(original.name ? { name: original.name } : {})
-      };
-    }
-  } catch {
-    // Ignore malformed mappings and keep the generated location.
+  if (original) {
+    usage.source = original;
   }
 
   return usage;
@@ -247,7 +262,14 @@ export function scanJs(input: JsScanInput): void {
     node: t.Node,
     confidence: Confidence = "high"
   ) => {
-    const usage = usageFor(node, file, source, base, input.sourceMap);
+    if (!key) {
+      return;
+    }
+    const original = originalLocationFor(node, input.sourceMap);
+    if (!canAddFeature(context, key, original?.file ?? file)) {
+      return;
+    }
+    const usage = usageFor(node, file, source, base, original);
     if (usage) {
       addFeature(context, key, "js", usage, confidence);
     }

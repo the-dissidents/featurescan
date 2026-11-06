@@ -43,6 +43,7 @@ export interface ScanOptions {
   include?: string[];
   exclude?: string[];
   maxUsages?: number;
+  maxUsagesPerFile?: number;
   onProgress?: (progress: ScanProgress) => void;
 }
 

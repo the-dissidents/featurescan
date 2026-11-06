@@ -57,6 +57,13 @@
           "minimum": 0,
           "examples": [10, 0]
         },
+        "maxUsagesPerFile": {
+          "type": "integer",
+          "description": "Maximum number of usage locations retained per feature per file. Source-mapped usages count against their original source file. 0 means unlimited. Defaults to 1.",
+          "default": 1,
+          "minimum": 0,
+          "examples": [1, 0]
+        },
         "out": {
           "type": "string",
           "description": "Manifest output path. Use `-` for stdout. When a file path is used, the human-readable report is printed to stdout instead of stderr.",
@@ -167,6 +174,7 @@
       "scan": {
         "format": "detailed",
         "maxUsages": 10,
+        "maxUsagesPerFile": 1,
         "out": "features.json"
       },
       "check": {

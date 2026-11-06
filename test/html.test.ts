@@ -4,7 +4,9 @@ import { createTestContext } from "./helpers";
 
 describe("HTML scanner", () => {
   it("detects elements, attributes, inline CSS and inline JS", () => {
-    const { context, catalog } = createTestContext();
+    const { context, catalog } = createTestContext({
+      maxUsagesPerFile: Infinity
+    });
     const source = `<!doctype html>
 <html lang="en">
   <head>

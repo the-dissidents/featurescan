@@ -55,6 +55,9 @@ featurescan scan ./dist --format lines -o features.txt
 # Detailed output with usages and source-map origins
 featurescan scan ./dist --format detailed -o features-detailed.json
 
+# Keep up to three usage locations per feature per file
+featurescan scan ./dist --format detailed --max-usages-per-file 3
+
 # Custom discovery
 featurescan scan ./dist --include '**/*.html' --exclude 'legacy/**'
 ```
@@ -95,6 +98,7 @@ appended.
     "exclude": ["legacy/**"],
     "format": "detailed",
     "maxUsages": 10,
+    "maxUsagesPerFile": 1,
     "out": "features.json",
     "verbose": true,
     "progress": true,
@@ -115,8 +119,8 @@ appended.
 }
 ```
 
-- `scan`: `include`, `exclude`, `format`, `maxUsages`, `out`, `verbose`,
-  `progress`, `quiet`
+- `scan`: `include`, `exclude`, `format`, `maxUsages`, `maxUsagesPerFile`, `out`,
+  `verbose`, `progress`, `quiet`
 - `check`: `browsers`, `includeSource`, `excludeSource`, `includePackage`,
   `excludePackage`, `showDependencyPaths`, `groupByKind`, `fail`, `json`,
   `quiet`
@@ -269,10 +273,13 @@ resolved from local files, `file:` URLs, and data URLs. Remote source maps are
 ignored. Verbose scan reports show the mapped location as
 `generated -> original`.
 
-Detailed manifests retain at most 10 usages per feature per package by default;
-non-dependency sources share one project bucket. Set `--max-usages 0` for
-unlimited usages or a higher value for more precise source filtering. Keys-only
-manifests remain the default for runtime compatibility checks.
+Detailed manifests retain at most 1 usage per feature per file and 10 usages per
+feature per package by default; non-dependency sources share one project bucket.
+Source-mapped usages count against their original source file. Set
+`--max-usages-per-file 0` or `--max-usages 0` for unlimited usages, or a higher
+value for more precise source filtering. Once either cap is reached, further
+occurrences are skipped during the scan. Keys-only manifests remain the default
+for runtime compatibility checks.
 
 ## Library API
 
@@ -286,7 +293,7 @@ import {
   parseManifestData
 } from "featurescan";
 
-const result = await scan("./dist", { maxUsages: 20 });
+const result = await scan("./dist", { maxUsages: 20, maxUsagesPerFile: 2 });
 const keys = manifestKeys(result);
 const json = formatManifest(keys, "json");
 const detailed = formatDetailedManifest(result);

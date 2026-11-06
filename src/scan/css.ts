@@ -1,6 +1,12 @@
 import { parse, walk, type CssNode } from "css-tree";
 import type { ScanContext } from "./context";
-import { addFeature, addSyntheticFeature, warn } from "./context";
+import {
+  addFeature,
+  addSyntheticFeature,
+  canAddFeature,
+  canAddSyntheticFeature,
+  warn
+} from "./context";
 import { makeUsage } from "./source";
 
 const VENDOR_PREFIX = /^-(webkit|moz|ms|o|khtml)-/;
@@ -69,6 +75,12 @@ export function scanCss(input: CssScanInput): void {
     synthetic: boolean
   ) => {
     if (!key || !node.loc) {
+      return;
+    }
+    const allowed = synthetic
+      ? canAddSyntheticFeature(context, key, file)
+      : canAddFeature(context, key, file);
+    if (!allowed) {
       return;
     }
     const start = node.loc.start;

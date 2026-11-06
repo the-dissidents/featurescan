@@ -17,7 +17,7 @@ function sourceUsage(source: string, line: number): Usage {
 
 describe("Catalog", () => {
   it("caps usages per feature per package", () => {
-    const catalog = new Catalog(2);
+    const catalog = new Catalog(2, Infinity);
     const project = [
       usage("src/app.js", 1),
       usage("src/app.js", 2),
@@ -65,20 +65,51 @@ describe("Catalog", () => {
   });
 
   it("does not count duplicate locations toward the cap", () => {
-    const catalog = new Catalog(1);
+    const catalog = new Catalog(2, Infinity);
     const first = usage("src/app.js", 1);
+    const second = usage("src/app.js", 2);
     catalog.add("api.fetch", "js", first);
     catalog.add("api.fetch", "js", first);
-    catalog.add("api.fetch", "js", usage("src/app.js", 2));
+    catalog.add("api.fetch", "js", first);
+    catalog.add("api.fetch", "js", second);
+    catalog.add("api.fetch", "js", usage("src/app.js", 3));
 
-    expect(catalog.results()[0]?.usages).toEqual([first]);
+    expect(catalog.results()[0]?.usages).toEqual([first, second]);
+  });
+
+  it("defaults to 1 usage per feature per file", () => {
+    const catalog = new Catalog();
+    catalog.add("api.fetch", "js", usage("src/app.js", 1));
+    catalog.add("api.fetch", "js", usage("src/app.js", 2));
+    catalog.add("api.fetch", "js", usage("src/other.js", 3));
+
+    expect(catalog.results()[0]?.usages).toEqual([
+      usage("src/app.js", 1),
+      usage("src/other.js", 3)
+    ]);
   });
 
   it("defaults to 10 usages per project bucket", () => {
     const catalog = new Catalog();
     for (let index = 1; index <= 12; index += 1) {
-      catalog.add("api.fetch", "js", usage("src/app.js", index));
+      catalog.add("api.fetch", "js", usage(`src/file${index}.js`, index));
     }
     expect(catalog.results()[0]?.usages).toHaveLength(10);
+  });
+
+  it("reports whether another usage would be retained", () => {
+    const catalog = new Catalog(10, 1);
+    expect(catalog.canAdd("api.fetch", "src/app.js")).toBe(true);
+    catalog.add("api.fetch", "js", usage("src/app.js", 1));
+    expect(catalog.canAdd("api.fetch", "src/app.js")).toBe(false);
+    expect(catalog.canAdd("api.fetch", "src/other.js")).toBe(true);
+  });
+
+  it("treats zero limits as unlimited", () => {
+    const catalog = new Catalog(0, 0);
+    for (let index = 1; index <= 20; index += 1) {
+      catalog.add("api.fetch", "js", usage("src/app.js", index));
+    }
+    expect(catalog.results()[0]?.usages).toHaveLength(20);
   });
 });

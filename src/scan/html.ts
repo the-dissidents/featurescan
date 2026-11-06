@@ -4,7 +4,7 @@ import {
 } from "parse5";
 import type { Namespace } from "../compat/bcd";
 import type { ScanContext } from "./context";
-import { addFeature, warn } from "./context";
+import { addFeature, canAddFeature, warn } from "./context";
 import { scanCss } from "./css";
 import { scanJs } from "./js";
 import { LineMap, makeUsage } from "./source";
@@ -230,6 +230,9 @@ export function scanHtml(input: HtmlScanInput): void {
     line: number,
     column: number
   ) => {
+    if (!canAddFeature(context, key, file)) {
+      return;
+    }
     addFeature(
       context,
       key,

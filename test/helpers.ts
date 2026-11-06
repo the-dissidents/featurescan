@@ -10,8 +10,19 @@ export interface TestContext {
   diagnostics: Diagnostic[];
 }
 
-export function createTestContext(compat = new CompatDB()): TestContext {
-  const catalog = new Catalog();
+export interface TestCatalogLimits {
+  maxUsagesPerBucket?: number;
+  maxUsagesPerFile?: number;
+}
+
+export function createTestContext(
+  limits: TestCatalogLimits = {},
+  compat = new CompatDB()
+): TestContext {
+  const catalog = new Catalog(
+    limits.maxUsagesPerBucket,
+    limits.maxUsagesPerFile
+  );
   const diagnostics: Diagnostic[] = [];
   const context: ScanContext = { compat, catalog, diagnostics };
   return { context, catalog, compat, diagnostics };

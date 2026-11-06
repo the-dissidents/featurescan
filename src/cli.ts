@@ -35,13 +35,17 @@ interface CheckCliOptions extends CheckCliOverrides {
   listBrowsers?: boolean;
 }
 
-function parseMaxUsages(value: string | number | undefined): number {
+function parseUsageLimit(
+  value: string | number | undefined,
+  flag: string,
+  fallback: number
+): number {
   if (value === undefined) {
-    return 10;
+    return fallback;
   }
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error("--max-usages must be a non-negative number");
+    throw new Error(`${flag} must be a non-negative number`);
   }
   return Math.floor(parsed);
 }
@@ -65,7 +69,12 @@ async function runScan(
     settings.progress &&
     process.env.TERM !== "dumb";
   const progress = new ProgressBar(process.stderr, showProgress);
-  const maxUsages = parseMaxUsages(settings.maxUsages);
+  const maxUsages = parseUsageLimit(settings.maxUsages, "--max-usages", 10);
+  const maxUsagesPerFile = parseUsageLimit(
+    settings.maxUsagesPerFile,
+    "--max-usages-per-file",
+    1
+  );
 
   const result = await (async () => {
     try {
@@ -73,6 +82,7 @@ async function runScan(
         include: settings.include,
         exclude: settings.exclude,
         maxUsages,
+        maxUsagesPerFile,
         onProgress: showProgress
           ? (state) => progress.update(state)
           : undefined
@@ -195,6 +205,10 @@ export async function main(argv = process.argv): Promise<void> {
     .option(
       "--max-usages <count>",
       "maximum usage locations per feature per package (default: 10; 0 = unlimited)"
+    )
+    .option(
+      "--max-usages-per-file <count>",
+      "maximum usage locations per feature per file (default: 1; 0 = unlimited)"
     )
     .option("-v, --verbose", "show usage locations in the report")
     .option("-q, --quiet", "suppress the report and progress bar")

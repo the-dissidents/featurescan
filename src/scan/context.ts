@@ -8,6 +8,26 @@ export interface ScanContext {
   diagnostics: Diagnostic[];
 }
 
+export function canAddFeature(
+  context: ScanContext,
+  key: string | undefined,
+  file: string
+): key is string {
+  return (
+    key !== undefined &&
+    context.compat.has(key) &&
+    context.catalog.canAdd(key, file)
+  );
+}
+
+export function canAddSyntheticFeature(
+  context: ScanContext,
+  key: string | undefined,
+  file: string
+): key is string {
+  return key !== undefined && context.catalog.canAdd(key, file);
+}
+
 export function addFeature(
   context: ScanContext,
   key: string | undefined,

@@ -23,7 +23,9 @@ export async function scan(
   );
   const maxUsages =
     options.maxUsages === undefined ? 10 : options.maxUsages;
-  const catalog = new Catalog(maxUsages === 0 ? Infinity : maxUsages);
+  const maxUsagesPerFile =
+    options.maxUsagesPerFile === undefined ? 1 : options.maxUsagesPerFile;
+  const catalog = new Catalog(maxUsages, maxUsagesPerFile);
   const diagnostics: Diagnostic[] = [];
   const context: ScanContext = {
     compat: new CompatDB(),

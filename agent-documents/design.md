@@ -73,8 +73,10 @@ Build/tooling:
   documents every option, type, default, and example.
 - `--format detailed` emits `{ schemaVersion, tool, features }` with usage
   locations and source-map origins. Usage retention is capped at 10 per feature
-  per package by default; non-dependency sources share one project bucket. Set
-  `maxUsages` to 0 for unlimited retention.
+  per package and 1 per feature per file by default; non-dependency sources share
+  one project bucket. Set `maxUsages` or `maxUsagesPerFile` to 0 for unlimited
+  retention. Once either cap is reached, scanners stop constructing further
+  usages for that feature (avoiding snippet extraction and source-map lookups).
 - `check --group-by-kind` nests unsupported/warnings/unknown/dependencies/
   ignored sections under HTML, CSS, and JS headings; the default flat layout
   keeps those categories at target level.

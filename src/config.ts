@@ -8,6 +8,7 @@ export interface ScanConfig {
   exclude?: string[];
   format?: ManifestFormat;
   maxUsages?: number;
+  maxUsagesPerFile?: number;
   out?: string;
   verbose?: boolean;
   progress?: boolean;
@@ -48,6 +49,7 @@ export interface ScanCliOverrides {
   exclude?: string[] | string;
   format?: string;
   maxUsages?: string | number;
+  maxUsagesPerFile?: string | number;
   out?: string;
   verbose?: boolean;
   quiet?: boolean;
@@ -72,6 +74,7 @@ export interface ResolvedScanConfig {
   exclude?: string[];
   format: ManifestFormat;
   maxUsages?: string | number;
+  maxUsagesPerFile?: string | number;
   out?: string;
   verbose: boolean;
   quiet: boolean;
@@ -123,6 +126,7 @@ export function resolveScanConfig(
     exclude: cliStringArray(cli.exclude) ?? config.exclude,
     format,
     maxUsages: cli.maxUsages ?? config.maxUsages,
+    maxUsagesPerFile: cli.maxUsagesPerFile ?? config.maxUsagesPerFile,
     out: cli.out ?? config.out,
     verbose: cli.verbose ?? config.verbose ?? false,
     quiet: cli.quiet ?? config.quiet ?? false,
