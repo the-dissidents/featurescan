@@ -37,13 +37,13 @@ corresponding prefix warning.
 ## Usage
 
 ```bash
-# Print the manifest to stdout and a readable report to stderr
+# Print the manifest to stdout and a summary to stderr
 featurescan scan ./dist
 
-# Write the manifest to a file and print the report to stdout
+# Write the manifest to a file and print the summary to stdout
 featurescan scan ./dist -o features.json
 
-# Include usage locations in the report
+# Print the full report instead of the summary
 featurescan scan ./dist -o features.json --verbose
 
 # Disable the interactive progress bar
@@ -68,11 +68,15 @@ map files as standalone inputs. Inline `<style>`, `<script>`, `style=""`, and
 common `on*` handlers are scanned as well. Referenced JS source maps are read
 when available.
 
-Without `-o`, the manifest goes to stdout and the report to stderr, so the
-manifest can be piped. With `-o`, the manifest is written to the file and the
-report goes to stdout. An interactive progress bar is shown on stderr and is
-disabled automatically when stderr is not a TTY. Report colors follow the
-report's destination stream; use `--no-color` or `NO_COLOR` to disable them.
+By default the manifest is written and a short summary is printed: the tool
+version, the number of scanned files and duration, the number of detected
+features by kind, and, with `-o`, the manifest path. Without `-o` the summary
+goes to stderr so the manifest can still be piped; with `-o` it goes to stdout. Pass `--verbose` to print the full
+report, which lists detected features and warnings. Neither mode includes usage
+locations; use `--format detailed` for those. An interactive progress bar is
+shown on stderr and is disabled automatically when stderr is not a TTY. Report
+colors follow the output's destination stream; use `--no-color` or `NO_COLOR` to
+disable them.
 
 ## Configuration
 
@@ -270,8 +274,8 @@ Exit codes:
 
 JS `//# sourceMappingURL=` and `/*# sourceMappingURL=... */` comments are
 resolved from local files, `file:` URLs, and data URLs. Remote source maps are
-ignored. Verbose scan reports show the mapped location as
-`generated -> original`.
+ignored. Detailed manifests record the mapped location in each usage's
+`source` field.
 
 Detailed manifests retain at most 1 usage per feature per file and 10 usages per
 feature per package by default; non-dependency sources share one project bucket.

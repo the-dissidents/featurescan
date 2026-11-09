@@ -21,7 +21,8 @@ import { ProgressBar } from "./report/progress";
 import {
   formatCheckJson,
   printCheckReport,
-  printScanReport
+  printScanReport,
+  printScanSummary
 } from "./report/report";
 import { scan } from "./scan/index";
 import { VERSION } from "./version";
@@ -106,13 +107,18 @@ async function runScan(
     process.stdout.write(output);
   }
 
-  printScanReport(result, keys, {
-    verbose: settings.verbose,
-    quiet: settings.quiet,
-    out: writeToFile ? out : undefined,
-    durationMs: Date.now() - started,
-    stream: reportStream
-  });
+  if (!settings.quiet) {
+    const reportOptions = {
+      out: writeToFile ? out : undefined,
+      durationMs: Date.now() - started,
+      stream: reportStream
+    };
+    if (settings.verbose) {
+      printScanReport(result, keys, reportOptions);
+    } else {
+      printScanSummary(result, keys, reportOptions);
+    }
+  }
 }
 
 async function runCheck(
@@ -190,7 +196,7 @@ export async function main(argv = process.argv): Promise<void> {
     .command("scan [root]", "Scan a built site and emit a feature key manifest")
     .option(
       "-o, --out <file>",
-      "write the manifest to a file and print the report to stdout"
+      "write the manifest to a file (the report, when enabled, goes to stdout)"
     )
     .option(
       "--format <format>",
@@ -210,8 +216,8 @@ export async function main(argv = process.argv): Promise<void> {
       "--max-usages-per-file <count>",
       "maximum usage locations per feature per file (default: 1; 0 = unlimited)"
     )
-    .option("-v, --verbose", "show usage locations in the report")
-    .option("-q, --quiet", "suppress the report and progress bar")
+    .option("-v, --verbose", "print the full scan report instead of the summary")
+    .option("-q, --quiet", "suppress the summary, report, and progress bar")
     .option("--progress", "show the progress bar (use --no-progress to disable)")
     .action(runScan);
 

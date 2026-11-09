@@ -71,7 +71,7 @@
         },
         "verbose": {
           "type": "boolean",
-          "description": "Show usage locations, including source-map origins, in the scan report.",
+          "description": "Print the full scan report instead of the default summary. The report lists detected features and warnings but does not include usage locations.",
           "default": false
         },
         "progress": {
@@ -81,7 +81,7 @@
         },
         "quiet": {
           "type": "boolean",
-          "description": "Suppress the human-readable report and progress bar. The manifest is still written.",
+          "description": "Suppress the scan summary, full report, and progress bar. The manifest is still written.",
           "default": false
         }
       }

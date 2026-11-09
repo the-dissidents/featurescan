@@ -5,8 +5,6 @@ import { createColors, type Colors } from "./colors";
 import { describeKey, kindForKey } from "./describe";
 
 export interface ScanReportOptions {
-  verbose?: boolean;
-  quiet?: boolean;
   out?: string;
   durationMs?: number;
   stream?: NodeJS.WriteStream;
@@ -23,43 +21,26 @@ const GROUP_TITLES: Record<string, string> = {
   js: "JS"
 };
 
-function usageLines(
-  feature: Detection,
-  limit: number,
-  colors: Colors
-): string[] {
-  const usages = feature.usages.slice(0, limit);
-  const lines = usages.map((usage) => {
-    const snippet = usage.snippet ? `  ${colors.dim(usage.snippet)}` : "";
-    const source = usage.source
-      ? ` ${colors.cyan(
-          `-> ${usage.source.file}:${usage.source.line}:${usage.source.column}${
-            usage.source.name ? ` (${usage.source.name})` : ""
-          }`
-        )}`
-      : "";
-    return `    ${usage.file}:${usage.line}:${usage.column}${source}${snippet}`;
-  });
-  const remaining = feature.usages.length - usages.length;
-  if (remaining > 0) {
-    lines.push(`    ${colors.dim(`... and ${remaining} more`)}`);
+const GROUP_ORDER = ["html", "css", "js"] as const;
+
+type FeatureGroups = Record<(typeof GROUP_ORDER)[number], Detection[]>;
+
+function groupFeatures(features: Detection[]): FeatureGroups {
+  const groups: FeatureGroups = { html: [], css: [], js: [] };
+  for (const feature of features) {
+    groups[kindForKey(feature.key)].push(feature);
   }
-  return lines;
+  return groups;
 }
 
-export function printScanReport(
+function headerLines(
   result: ScanResult,
   keys: string[],
-  options: ScanReportOptions = {}
-): void {
-  if (options.quiet) {
-    return;
-  }
-
-  const stream = options.stream ?? process.stderr;
-  const colors = createColors(stream);
-  const lines: string[] = [];
-  lines.push(colors.bold(`featurescan ${VERSION}`));
+  groups: FeatureGroups,
+  options: ScanReportOptions,
+  colors: Colors
+): string[] {
+  const lines: string[] = [colors.bold(`featurescan ${VERSION}`)];
   const duration =
     options.durationMs === undefined ? "" : ` in ${options.durationMs} ms`;
   lines.push(
@@ -70,6 +51,44 @@ export function printScanReport(
 
   if (keys.length === 0) {
     lines.push("Found no features.");
+    return lines;
+  }
+
+  lines.push(
+    `Found ${keys.length} feature${keys.length === 1 ? "" : "s"}: ` +
+      GROUP_ORDER.map(
+        (group) => `${groups[group].length} ${GROUP_TITLES[group]}`
+      ).join(", ")
+  );
+  return lines;
+}
+
+export function printScanSummary(
+  result: ScanResult,
+  keys: string[],
+  options: ScanReportOptions = {}
+): void {
+  const stream = options.stream ?? process.stderr;
+  const colors = createColors(stream);
+  const groups = groupFeatures(result.features);
+  const lines = headerLines(result, keys, groups, options, colors);
+  if (options.out) {
+    lines.push(`Manifest written to ${options.out}`);
+  }
+  stream.write(`${lines.join("\n")}\n`);
+}
+
+export function printScanReport(
+  result: ScanResult,
+  keys: string[],
+  options: ScanReportOptions = {}
+): void {
+  const stream = options.stream ?? process.stderr;
+  const colors = createColors(stream);
+  const groups = groupFeatures(result.features);
+  const lines = headerLines(result, keys, groups, options, colors);
+
+  if (keys.length === 0) {
     if (options.out) {
       lines.push(`Manifest written to ${options.out}`);
     }
@@ -77,20 +96,8 @@ export function printScanReport(
     return;
   }
 
-  const groups: Record<string, Detection[]> = { html: [], css: [], js: [] };
-  for (const feature of result.features) {
-    groups[kindForKey(feature.key)]?.push(feature);
-  }
-
-  lines.push(
-    `Found ${keys.length} feature${keys.length === 1 ? "" : "s"}: ` +
-      (["html", "css", "js"] as const)
-        .map((group) => `${groups[group]?.length ?? 0} ${GROUP_TITLES[group]}`)
-        .join(", ")
-  );
-
-  for (const group of ["html", "css", "js"] as const) {
-    const features = groups[group] ?? [];
+  for (const group of GROUP_ORDER) {
+    const features = groups[group];
     if (features.length === 0) {
       continue;
     }
@@ -98,9 +105,6 @@ export function printScanReport(
     lines.push(colors.bold(`${GROUP_TITLES[group]} (${features.length})`));
     for (const feature of features) {
       lines.push(`  ${colors.cyan(describeKey(feature.key))}`);
-      if (options.verbose) {
-        lines.push(...usageLines(feature, 3, colors));
-      }
     }
   }
 

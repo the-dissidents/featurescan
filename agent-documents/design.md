@@ -58,9 +58,13 @@ Build/tooling:
 - `scan` exposes an `onProgress` callback through `ScanOptions`.
 - The CLI renders an interactive progress bar on stderr only when stderr is a
   TTY; `--quiet` and `--no-progress` disable it.
-- Without `-o`, the manifest is written to stdout and the report to stderr.
-- With `-o`, the manifest is written to the file and the report to stdout, so
-  report output can be redirected independently without corrupting the manifest.
+- By default the manifest is written along with a short summary (version, file
+  count and duration, feature counts by kind, and the manifest path when `-o` is
+  used); `--verbose` prints the full feature/warning report instead. Neither
+  output includes usage locations (use `--format detailed` for those).
+- Without `-o`, the summary/report is written to stderr; with `-o`, it goes to
+  stdout, so report output can be redirected independently without corrupting
+  the manifest.
 - Report colors are derived from the report's destination stream, not stdout,
   so redirected manifests do not strip color from a TTY report.
 - `--no-color` and `NO_COLOR` disable colors.
@@ -76,7 +80,7 @@ Build/tooling:
   per package and 1 per feature per file by default; non-dependency sources share
   one project bucket. Set `maxUsages` or `maxUsagesPerFile` to 0 for unlimited
   retention. Once either cap is reached, scanners stop constructing further
-  usages for that feature (avoiding snippet extraction and source-map lookups).
+  usages for that feature (avoiding snippet extraction).
 - `check --group-by-kind` nests unsupported/warnings/unknown/dependencies/
   ignored sections under HTML, CSS, and JS headings; the default flat layout
   keeps those categories at target level.
